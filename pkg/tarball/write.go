@@ -262,14 +262,8 @@ func (ctx *Context) WriteArchive(dst io.Writer, src fs.FS) error {
 	}
 
 	// get the uname and gname maps
-	usersFile, err := passwd.ReadUserFile(src, "etc/passwd")
-	if err != nil {
-		return fmt.Errorf("reading passwd file failed: %w", err)
-	}
-	groupsFile, err := passwd.ReadGroupFile(src, "etc/group")
-	if err != nil {
-		return fmt.Errorf("reading group file failed: %w", err)
-	}
+	usersFile, _ := passwd.ReadUserFile(src, "etc/passwd")
+	groupsFile, _ := passwd.ReadGroupFile(src, "etc/group")
 	users := map[int]string{}
 	groups := map[int]string{}
 	for _, u := range usersFile.Entries {
