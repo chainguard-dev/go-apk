@@ -27,8 +27,8 @@ import (
 	gzip "golang.org/x/build/pargzip"
 	"golang.org/x/sys/unix"
 
-	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
-	"github.com/chainguard-dev/apkgo/pkg/passwd"
+	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
+	"github.com/chainguard-dev/go-apk/pkg/passwd"
 )
 
 func hasHardlinks(fi fs.FileInfo) bool {

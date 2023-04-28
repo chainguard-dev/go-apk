@@ -33,7 +33,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
-	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
+	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 )
 
 type APK struct {
@@ -441,7 +441,7 @@ func (a *APK) FixateWorld(cache, updateCache, executeScripts bool, sourceDateEpo
 	//     d. Update /lib/apk/db/scripts.tar
 	//     d. Update /lib/apk/db/triggers
 	//     e. Update the installed file
-	dir, err := os.MkdirTemp("", "apkgo")
+	dir, err := os.MkdirTemp("", "go-apk")
 	if err != nil {
 		return fmt.Errorf("could not make temp dir: %w", err)
 	}

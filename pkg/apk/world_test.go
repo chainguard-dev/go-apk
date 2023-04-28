@@ -20,7 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
+	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 )
 
 func TestGetWorld(t *testing.T) {

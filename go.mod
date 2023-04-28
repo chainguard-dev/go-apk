@@ -1,4 +1,4 @@
-module github.com/chainguard-dev/apkgo
+module github.com/chainguard-dev/go-apk
 
 go 1.20
 

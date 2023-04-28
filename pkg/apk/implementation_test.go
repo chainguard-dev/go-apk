@@ -27,7 +27,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
+	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 )
 
 var testDemoKey = `-----BEGIN PUBLIC KEY-----
@@ -121,7 +121,7 @@ func TestInitKeyring(t *testing.T) {
 	a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
 
-	dir, err := os.MkdirTemp("", "apkgo")
+	dir, err := os.MkdirTemp("", "go-apk")
 	require.NoError(t, err)
 
 	keyPath := filepath.Join(dir, "alpine-devel@lists.alpinelinux.org-5e69ca50.rsa.pub")

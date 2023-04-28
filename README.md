@@ -1,4 +1,4 @@
-# apkgo
+# go-apk
 
 A native go implementation of the functionality of the [Alpine Package Keeper](https://wiki.alpinelinux.org/wiki/Alpine_Package_Keeper)
 client utility `apk`.
@@ -11,14 +11,14 @@ read-write, chmod/chown, devices, and symlinks capabilities
 * an implementation of that FS on top of a directory, which uses the memfs for features the underlying disk does not support
 * tarball features
 
-Documentation is available at [https://pkg.go.dev/github.com/chainguard-dev/apkgo](https://pkg.go.dev/github.com/chainguard-dev/apkgo).
+Documentation is available at [https://pkg.go.dev/github.com/chainguard-dev/go-apk](https://pkg.go.dev/github.com/chainguard-dev/go-apk).
 
 ## Usage
 
 ```go
 import (
-    "github.com/chainguard-dev/apkgo/pkg/apk"
-    "github.com/chainguard-dev/apkgo/pkg/fs"
+    "github.com/chainguard-dev/go-apk/pkg/apk"
+    "github.com/chainguard-dev/go-apk/pkg/fs"
 )
 
 fsys := fs.NewMemFS()
@@ -47,7 +47,7 @@ chown/chmod, devices, etc.
 That makes it useful for reading, but not very useful for cases where you need to lay
 down data, like installing packages from a package manager.
 
-`github.com/chainguard-dev/apkgo/pkg/fs` provides a `FullFS` interface that extends the
+`github.com/chainguard-dev/go-apk/pkg/fs` provides a `FullFS` interface that extends the
 `fs.FS` interface with full read-write, chmod/chown, devices, and symlinks capabilities.
 You can do pretty much anything that you can do with a normal filesystem.
 
@@ -61,12 +61,12 @@ It also provides two implementations of that interface:
 
 ### Tarball
 
-`github.com/chainguard-dev/apkgo/pkg/tarball` provides a utility to write an [fs.FS](https://pkg.go.dev/io/fs#FS) to a tarball. It is implemented on a `tarball.Context`, which lets
+`github.com/chainguard-dev/go-apk/pkg/tarball` provides a utility to write an [fs.FS](https://pkg.go.dev/io/fs#FS) to a tarball. It is implemented on a `tarball.Context`, which lets
 you provide overrides for timestamps, UID/GID, and other features.
 
 ### apk
 
-`github.com/chainguard-dev/apkgo/pkg/apk` is the heart of this library. It provides a native go
+`github.com/chainguard-dev/go-apk/pkg/apk` is the heart of this library. It provides a native go
 implementation of the functionality of the
 [Alpine Package Keeper](https://wiki.alpinelinux.org/wiki/Alpine_Package_Keeper)
 with regards to reading repositories, installing packages, and managing a local install.
