@@ -22,7 +22,7 @@ import (
 )
 
 fsys := fs.NewMemFS()
-a, err := apk.NewAPKImplementation(
+a, err := apk.New(
 		apk.WithFS(fsys),
 		apk.WithArch("aarch64"),
 	)

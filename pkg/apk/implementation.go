@@ -36,7 +36,7 @@ import (
 	apkfs "chainguard.dev/apkgo/pkg/fs"
 )
 
-type APKImplementation struct {
+type APK struct {
 	arch              string
 	version           string
 	logger            Logger
@@ -46,14 +46,14 @@ type APKImplementation struct {
 	client            *http.Client
 }
 
-func NewAPKImplementation(options ...Option) (*APKImplementation, error) {
+func New(options ...Option) (*APK, error) {
 	opt := defaultOpts()
 	for _, o := range options {
 		if err := o(opt); err != nil {
 			return nil, err
 		}
 	}
-	return &APKImplementation{
+	return &APK{
 		fs:                opt.fs,
 		logger:            opt.logger,
 		arch:              opt.arch,
@@ -132,12 +132,12 @@ var initDeviceFiles = []deviceFile{
 // In general, you can leave this unset, and it will use the default http.Client.
 // It is useful for fine-grained control, for proxying, or for setting alternate
 // paths.
-func (a *APKImplementation) SetClient(client *http.Client) {
+func (a *APK) SetClient(client *http.Client) {
 	a.client = client
 }
 
 // ListInitFiles list the files that are installed during the InitDB phase.
-func (a *APKImplementation) ListInitFiles() []tar.Header {
+func (a *APK) ListInitFiles() []tar.Header {
 	var headers = make([]tar.Header, 0, 20)
 
 	// additionalFiles are files we need but can only be resolved in the context of
@@ -190,7 +190,7 @@ func (a *APKImplementation) ListInitFiles() []tar.Header {
 // Returns the list of files and directories and files installed and permissions,
 // unless those files will be included in the installed database, in which case they can
 // be retrieved via GetInstalled().
-func (a *APKImplementation) InitDB(versions ...string) error {
+func (a *APK) InitDB(versions ...string) error {
 	/*
 		equivalent of: "apk add --initdb --arch arch --root root"
 	*/
@@ -274,7 +274,7 @@ func (a *APKImplementation) InitDB(versions ...string) error {
 // loadSystemKeyring returns the keys found in the system keyring
 // directory by trying some common locations. These can be overridden
 // by passing one or more directories as arguments.
-func (a *APKImplementation) loadSystemKeyring(locations ...string) ([]string, error) {
+func (a *APK) loadSystemKeyring(locations ...string) ([]string, error) {
 	var ring []string
 	if len(locations) == 0 {
 		locations = []string{
@@ -312,7 +312,7 @@ func (a *APKImplementation) loadSystemKeyring(locations ...string) ([]string, er
 }
 
 // Installs the specified keys into the APK keyring inside the build context.
-func (a *APKImplementation) InitKeyring(keyFiles, extraKeyFiles []string) (err error) {
+func (a *APK) InitKeyring(keyFiles, extraKeyFiles []string) (err error) {
 	a.logger.Infof("initializing apk keyring")
 
 	if err := a.fs.MkdirAll(DefaultKeyRingPath, 0o755); err != nil {
@@ -389,7 +389,7 @@ func (a *APKImplementation) InitKeyring(keyFiles, extraKeyFiles []string) (err e
 }
 
 // ResolveWorld determine the target state for the requested dependencies in /etc/apk/world. Do not install anything.
-func (a *APKImplementation) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflicts []string, err error) {
+func (a *APK) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflicts []string, err error) {
 	a.logger.Infof("determining desired apk world")
 
 	// to fix the world, we need to:
@@ -412,7 +412,7 @@ func (a *APKImplementation) ResolveWorld() (toInstall []*repository.RepositoryPa
 }
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
-func (a *APKImplementation) FixateWorld(cache, updateCache, executeScripts bool, sourceDateEpoch *time.Time) error {
+func (a *APK) FixateWorld(cache, updateCache, executeScripts bool, sourceDateEpoch *time.Time) error {
 	/*
 		equivalent of: "apk fix --arch arch --root root"
 		with possible options for --no-scripts, --no-cache, --update-cache
@@ -481,7 +481,7 @@ func (e *NoKeysFoundError) Error() string {
 }
 
 // fetchAlpineKeys fetches the public keys for the repositories in the APK database.
-func (a *APKImplementation) fetchAlpineKeys(versions []string) error {
+func (a *APK) fetchAlpineKeys(versions []string) error {
 	u := alpineReleasesURL
 	client := a.client
 	if client == nil {
@@ -548,7 +548,7 @@ func (a *APKImplementation) fetchAlpineKeys(versions []string) error {
 // installPkg install a single package and update installed db.
 //
 //nolint:unparam // we do not use some params... yet.
-func (a *APKImplementation) installPackage(pkg *repository.RepositoryPackage, cache, updateCache, executeScripts bool, sourceDateEpoch *time.Time) error {
+func (a *APK) installPackage(pkg *repository.RepositoryPackage, cache, updateCache, executeScripts bool, sourceDateEpoch *time.Time) error {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
 	u := pkg.Url()

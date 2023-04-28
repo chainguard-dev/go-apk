@@ -43,7 +43,7 @@ QwIDAQAB
 
 func TestInitDB(t *testing.T) {
 	src := apkfs.NewMemFS()
-	apk, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
 	err = apk.InitDB()
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestInitDB(t *testing.T) {
 
 func TestSetWorld(t *testing.T) {
 	src := apkfs.NewMemFS()
-	apk, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
 	// for initialization
 	err = src.MkdirAll("etc/apk", 0o755)
@@ -97,7 +97,7 @@ func TestSetWorld(t *testing.T) {
 
 func TestSetRepositories(t *testing.T) {
 	src := apkfs.NewMemFS()
-	apk, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
 	// for initialization
 
@@ -118,7 +118,7 @@ func TestSetRepositories(t *testing.T) {
 
 func TestInitKeyring(t *testing.T) {
 	src := apkfs.NewMemFS()
-	a, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+	a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
 
 	dir, err := os.MkdirTemp("", "apkgo")
@@ -161,7 +161,7 @@ func TestInitKeyring(t *testing.T) {
 func TestLoadSystemKeyring(t *testing.T) {
 	t.Run("non-existent dir", func(t *testing.T) {
 		src := apkfs.NewMemFS()
-		a, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+		a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 		require.NoError(t, err)
 
 		// Read the empty dir, passing a non-existent location should err
@@ -170,7 +170,7 @@ func TestLoadSystemKeyring(t *testing.T) {
 	})
 	t.Run("empty dir", func(t *testing.T) {
 		src := apkfs.NewMemFS()
-		a, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+		a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 		require.NoError(t, err)
 
 		// Read the empty dir, passing only one empty location should err
@@ -191,7 +191,7 @@ func TestLoadSystemKeyring(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			arch := ArchToAPK(runtime.GOARCH)
 			src := apkfs.NewMemFS()
-			a, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+			a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 			require.NoError(t, err)
 
 			// Write some dummy keyfiles in a random location

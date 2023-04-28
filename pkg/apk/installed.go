@@ -38,7 +38,7 @@ type InstalledPackage struct {
 }
 
 // getInstalledPackages get list of installed packages
-func (a *APKImplementation) GetInstalled() ([]*InstalledPackage, error) {
+func (a *APK) GetInstalled() ([]*InstalledPackage, error) {
 	installedFile, err := a.fs.Open(installedFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("could not open installed file in %s at %s: %w", a.fs, installedFilePath, err)
@@ -48,7 +48,7 @@ func (a *APKImplementation) GetInstalled() ([]*InstalledPackage, error) {
 }
 
 // addInstalledPackage add a package to the list of installed packages
-func (a *APKImplementation) addInstalledPackage(pkg *repository.Package, files []tar.Header) error {
+func (a *APK) addInstalledPackage(pkg *repository.Package, files []tar.Header) error {
 	// be sure to open the file in append mode so we add to the end
 	installedFile, err := a.fs.OpenFile(installedFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -90,7 +90,7 @@ func (a *APKImplementation) addInstalledPackage(pkg *repository.Package, files [
 }
 
 // isInstalledPackage check if a specific package is installed
-func (a *APKImplementation) isInstalledPackage(pkg string) (bool, error) {
+func (a *APK) isInstalledPackage(pkg string) (bool, error) {
 	installedPackages, err := a.GetInstalled()
 	if err != nil {
 		return false, err
@@ -104,7 +104,7 @@ func (a *APKImplementation) isInstalledPackage(pkg string) (bool, error) {
 }
 
 // updateScriptsTar insert the scripts into the tarball
-func (a *APKImplementation) updateScriptsTar(pkg *repository.Package, controlTarGz io.Reader, sourceDateEpoch *time.Time) error {
+func (a *APK) updateScriptsTar(pkg *repository.Package, controlTarGz io.Reader, sourceDateEpoch *time.Time) error {
 	gz, err := gzip.NewReader(controlTarGz)
 	if err != nil {
 		return fmt.Errorf("unable to gunzip control tar.gz file: %w", err)
@@ -167,12 +167,12 @@ func (a *APKImplementation) updateScriptsTar(pkg *repository.Package, controlTar
 }
 
 // readScriptsTar returns a reader for the current scripts.tar. It is up to the caller to close it.
-func (a *APKImplementation) readScriptsTar() (io.ReadCloser, error) {
+func (a *APK) readScriptsTar() (io.ReadCloser, error) {
 	return a.fs.Open(scriptsFilePath)
 }
 
 // updateTriggers insert the triggers into the triggers file
-func (a *APKImplementation) updateTriggers(pkg *repository.Package, controlTarGz io.Reader) error {
+func (a *APK) updateTriggers(pkg *repository.Package, controlTarGz io.Reader) error {
 	gz, err := gzip.NewReader(controlTarGz)
 	if err != nil {
 		return fmt.Errorf("unable to gunzip control tar file: %w", err)
@@ -224,7 +224,7 @@ func (a *APKImplementation) updateTriggers(pkg *repository.Package, controlTarGz
 }
 
 // readTriggers returns a reader for the current triggers. It is up to the caller to close it.
-func (a *APKImplementation) readTriggers() (io.ReadCloser, error) {
+func (a *APK) readTriggers() (io.ReadCloser, error) {
 	return a.fs.Open(triggersFilePath)
 }
 

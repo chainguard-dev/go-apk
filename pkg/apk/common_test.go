@@ -45,7 +45,7 @@ func (t *testLocalTransport) RoundTrip(request *http.Request) (*http.Response, e
 	}, nil
 }
 
-func testGetTestAPK() (*APKImplementation, apkfs.FullFS, error) {
+func testGetTestAPK() (*APK, apkfs.FullFS, error) {
 	// load it all into memory so that we don't change any of our test data
 	src := apkfs.NewMemFS()
 	filesystem := os.DirFS("testdata/root")
@@ -75,7 +75,7 @@ func testGetTestAPK() (*APKImplementation, apkfs.FullFS, error) {
 	}); walkErr != nil {
 		return nil, nil, walkErr
 	}
-	apk, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	if err != nil {
 		return nil, nil, err
 	}

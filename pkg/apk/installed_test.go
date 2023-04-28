@@ -143,12 +143,12 @@ func TestUpdateScriptsTar(t *testing.T) {
 	gw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gw)
 	for name, content := range scripts {
-		tw.WriteHeader(&tar.Header{
+		_ = tw.WriteHeader(&tar.Header{
 			Name: name,
 			Mode: 0o644,
 			Size: int64(len(content)),
 		})
-		tw.Write(content)
+		_, _ = tw.Write(content)
 	}
 	tw.Close()
 	gw.Close()
@@ -225,12 +225,12 @@ func TestUpdateTriggers(t *testing.T) {
 	gw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gw)
 	for name, content := range scripts {
-		tw.WriteHeader(&tar.Header{
+		_ = tw.WriteHeader(&tar.Header{
 			Name: name,
 			Mode: 0o644,
 			Size: int64(len(content)),
 		})
-		tw.Write(content)
+		_, _ = tw.Write(content)
 	}
 	tw.Close()
 	gw.Close()

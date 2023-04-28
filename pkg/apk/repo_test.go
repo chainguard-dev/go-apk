@@ -68,8 +68,8 @@ htBqojBnThmjJQFgZXocHG8CAwEAAQ==
 -----END PUBLIC KEY-----`), 0644)
 	require.NoError(t, err, "unable to write key")
 
-	a, err := NewAPKImplementation(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
-	require.NoError(t, err, "unable to create APKImplementation")
+	a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+	require.NoError(t, err, "unable to create APK")
 
 	// set a client so we use local testdata instead of heading out to the Internet each time
 	a.SetClient(&http.Client{

@@ -23,7 +23,7 @@ import (
 )
 
 // getWorldPackages get list of packages that should be installed, according to /etc/apk/world
-func (a *APKImplementation) GetWorld() ([]string, error) {
+func (a *APK) GetWorld() ([]string, error) {
 	worldFile, err := a.fs.Open(worldFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("could not open world file in %s at %s: %w", a.fs, worldFilePath, err)
@@ -38,7 +38,7 @@ func (a *APKImplementation) GetWorld() ([]string, error) {
 
 // SetWorld sets the list of world packages intended to be installed.
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
-func (a *APKImplementation) SetWorld(packages []string) error {
+func (a *APK) SetWorld(packages []string) error {
 	a.logger.Infof("setting apk world")
 
 	// sort them before writing

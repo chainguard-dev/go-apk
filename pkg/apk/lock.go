@@ -15,11 +15,11 @@
 package apk
 
 // lock lock the apk database - TODO
-func (a *APKImplementation) lock() error {
+func (a *APK) lock() error {
 	return nil
 }
 
 // unlock unlock the apk database - TODO
-func (a *APKImplementation) unlock() error {
+func (a *APK) unlock() error {
 	return nil
 }

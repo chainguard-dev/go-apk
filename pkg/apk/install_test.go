@@ -218,19 +218,19 @@ func testCreateTGZForPackage(entries []testDirEntry) io.Reader {
 
 	for _, e := range entries {
 		if e.dir {
-			tw.WriteHeader(&tar.Header{
+			_ = tw.WriteHeader(&tar.Header{
 				Name:     e.path,
 				Typeflag: tar.TypeDir,
 				Mode:     int64(os.ModeDir | e.perms),
 			})
 		} else {
-			tw.WriteHeader(&tar.Header{
+			_ = tw.WriteHeader(&tar.Header{
 				Name:     e.path,
 				Typeflag: tar.TypeReg,
 				Mode:     int64(e.perms),
 				Size:     int64(len(e.content)),
 			})
-			tw.Write(e.content)
+			_, _ = tw.Write(e.content)
 		}
 	}
 	tw.Close()

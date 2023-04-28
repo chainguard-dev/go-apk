@@ -73,7 +73,7 @@ type repositoryPackage struct {
 
 // SetRepositories sets the contents of /etc/apk/repositories file.
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
-func (a *APKImplementation) SetRepositories(repos []string) error {
+func (a *APK) SetRepositories(repos []string) error {
 	a.logger.Infof("setting apk repositories")
 
 	data := strings.Join(repos, "\n")
@@ -87,7 +87,7 @@ func (a *APKImplementation) SetRepositories(repos []string) error {
 	return nil
 }
 
-func (a *APKImplementation) GetRepositories() (repos []string, err error) {
+func (a *APK) GetRepositories() (repos []string, err error) {
 	// get the repository URLs
 	reposFile, err := a.fs.Open(reposFilePath)
 	if err != nil {
@@ -103,7 +103,7 @@ func (a *APKImplementation) GetRepositories() (repos []string, err error) {
 
 // getRepositoryIndexes returns the indexes for the repositories in the specified root.
 // The signatures for each index are verified unless ignoreSignatures is set to true.
-func (a *APKImplementation) getRepositoryIndexes(ignoreSignatures bool) ([]*namedRepositoryWithIndex, error) {
+func (a *APK) getRepositoryIndexes(ignoreSignatures bool) ([]*namedRepositoryWithIndex, error) {
 	// get the repository URLs
 	repos, err := a.GetRepositories()
 	if err != nil {

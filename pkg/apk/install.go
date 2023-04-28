@@ -28,7 +28,7 @@ import (
 )
 
 // writeOneFile writes one file from the APK given the tar header and tar reader.
-func (a *APKImplementation) writeOneFile(header *tar.Header, r io.Reader, allowOverwrite bool) error {
+func (a *APK) writeOneFile(header *tar.Header, r io.Reader, allowOverwrite bool) error {
 	// check if the file exists; allow override if the origin i
 	if _, err := a.fs.Stat(header.Name); err == nil {
 		if !allowOverwrite {
@@ -64,7 +64,7 @@ func (a *APKImplementation) writeOneFile(header *tar.Header, r io.Reader, allowO
 // installAPKFiles install the files from the APK and return the list of installed files
 // and their permissions. Returns a tar.Header because it is a convenient existing
 // struct that has all of the fields we need.
-func (a *APKImplementation) installAPKFiles(gzipIn io.Reader, origin string) ([]tar.Header, error) {
+func (a *APK) installAPKFiles(gzipIn io.Reader, origin string) ([]tar.Header, error) {
 	var files []tar.Header
 	gr, err := gzip.NewReader(gzipIn)
 	if err != nil {
