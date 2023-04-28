@@ -18,7 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/sha1" // nolint:gosec
+	"crypto/sha1" //nolint:gosec
 	"errors"
 	"fmt"
 	"io"
@@ -32,7 +32,6 @@ import (
 	"github.com/chainguard-dev/go-apk/pkg/tarball"
 )
 
-// TODO: solidify this API and move into pkg/
 func SignIndex(logger *log.Logger, signingKey string, indexFile string) error {
 	is, err := indexIsAlreadySigned(indexFile)
 	if err != nil {
@@ -139,7 +138,7 @@ func ReadAndHashIndexFile(indexFile string) ([]byte, []byte, error) {
 }
 
 func HashData(data []byte) ([]byte, error) {
-	digest := sha1.New() // nolint:gosec
+	digest := sha1.New() //nolint:gosec
 	if n, err := digest.Write(data); err != nil || n != len(data) {
 		return nil, fmt.Errorf("unable to hash data: %w", err)
 	}

@@ -25,10 +25,10 @@ import (
 
 func TestGetWorld(t *testing.T) {
 	src := apkfs.NewMemFS()
-	err := src.MkdirAll("etc/apk", 0755)
+	err := src.MkdirAll("etc/apk", 0o755)
 	require.NoError(t, err, "unable to mkdir /etc/apk")
 	packages := []string{"package1", "package2", "package3"}
-	err = src.WriteFile(worldFilePath, []byte(strings.Join(packages, "\n")), 0644)
+	err = src.WriteFile(worldFilePath, []byte(strings.Join(packages, "\n")), 0o644)
 	require.NoError(t, err, "unable to write world file")
 	a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err, "unable to create APK")

@@ -16,7 +16,7 @@ package tarball
 
 import (
 	"archive/tar"
-	"crypto/sha1" // nolint:gosec
+	"crypto/sha1" //nolint:gosec
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -52,7 +52,10 @@ func hasHardlinks(fi fs.FileInfo) bool {
 
 func getInodeFromFileInfo(fi fs.FileInfo) (uint64, error) {
 	if stat := fi.Sys(); stat != nil {
-		si := stat.(*syscall.Stat_t)
+		si, ok := stat.(*syscall.Stat_t)
+		if !ok {
+			return 0, fmt.Errorf("unable to stat underlying file")
+		}
 
 		// if we don't have inodes, we just assume the filesystem
 		// does not support hardlinks
@@ -66,7 +69,7 @@ func getInodeFromFileInfo(fi fs.FileInfo) (uint64, error) {
 	return 0, fmt.Errorf("unable to stat underlying file")
 }
 
-func (ctx *Context) writeTar(tw *tar.Writer, fsys fs.FS, users, groups map[int]string) error {
+func (ctx *Context) writeTar(tw *tar.Writer, fsys fs.FS, users, groups map[int]string) error { //nolint:gocyclo
 	if users == nil {
 		users = map[int]string{}
 	}
@@ -199,7 +202,7 @@ func (ctx *Context) writeTar(tw *tar.Writer, fsys fs.FS, users, groups map[int]s
 			header.PAXRecords = map[string]string{}
 
 			if link != "" {
-				linkDigest := sha1.Sum([]byte(link)) // nolint:gosec
+				linkDigest := sha1.Sum([]byte(link)) //nolint:gosec
 				linkChecksum := hex.EncodeToString(linkDigest[:])
 				header.PAXRecords["APK-TOOLS.checksum.SHA1"] = linkChecksum
 			} else if info.Mode().IsRegular() {
@@ -209,7 +212,7 @@ func (ctx *Context) writeTar(tw *tar.Writer, fsys fs.FS, users, groups map[int]s
 				}
 				defer data.Close()
 
-				fileDigest := sha1.New() // nolint:gosec
+				fileDigest := sha1.New() //nolint:gosec
 				if _, err := io.Copy(fileDigest, data); err != nil {
 					return err
 				}
@@ -259,8 +262,14 @@ func (ctx *Context) WriteArchive(dst io.Writer, src fs.FS) error {
 	}
 
 	// get the uname and gname maps
-	usersFile, _ := passwd.ReadUserFile(src, "etc/passwd")
-	groupsFile, _ := passwd.ReadGroupFile(src, "etc/group")
+	usersFile, err := passwd.ReadUserFile(src, "etc/passwd")
+	if err != nil {
+		return fmt.Errorf("reading passwd file failed: %w", err)
+	}
+	groupsFile, err := passwd.ReadGroupFile(src, "etc/group")
+	if err != nil {
+		return fmt.Errorf("reading group file failed: %w", err)
+	}
 	users := map[int]string{}
 	groups := map[int]string{}
 	for _, u := range usersFile.Entries {
