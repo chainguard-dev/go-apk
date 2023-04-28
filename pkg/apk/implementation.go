@@ -33,7 +33,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
-	apkfs "chainguard.dev/apkgo/pkg/fs"
+	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
 )
 
 type APK struct {

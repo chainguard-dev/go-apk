@@ -18,7 +18,7 @@ import (
 	"io"
 	"runtime"
 
-	apkfs "chainguard.dev/apkgo/pkg/fs"
+	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
 	"github.com/sirupsen/logrus"
 )
 

@@ -22,7 +22,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"chainguard.dev/apkgo/pkg/tarball"
+	"github.com/chainguard-dev/apkgo/pkg/tarball"
 )
 
 //go:embed testdata

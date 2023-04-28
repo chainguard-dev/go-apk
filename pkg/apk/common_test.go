@@ -20,7 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
-	apkfs "chainguard.dev/apkgo/pkg/fs"
+	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
 )
 
 type testLocalTransport struct {

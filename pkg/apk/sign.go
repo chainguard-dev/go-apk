@@ -29,7 +29,7 @@ import (
 
 	"github.com/psanford/memfs"
 
-	"chainguard.dev/apkgo/pkg/tarball"
+	"github.com/chainguard-dev/apkgo/pkg/tarball"
 )
 
 // TODO: solidify this API and move into pkg/

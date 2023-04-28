@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.alpinelinux.org/alpine/go/repository"
 
-	apkfs "chainguard.dev/apkgo/pkg/fs"
+	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
 )
 
 func TestGetRepositoryIndexes(t *testing.T) {

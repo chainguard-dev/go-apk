@@ -27,7 +27,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	apkfs "chainguard.dev/apkgo/pkg/fs"
+	apkfs "github.com/chainguard-dev/apkgo/pkg/fs"
 )
 
 var testDemoKey = `-----BEGIN PUBLIC KEY-----
