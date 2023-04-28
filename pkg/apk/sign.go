@@ -18,7 +18,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha1" //nolint:gosec
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -32,7 +37,118 @@ import (
 	"github.com/chainguard-dev/go-apk/pkg/tarball"
 )
 
-func SignIndex(logger *log.Logger, signingKey string, indexFile string) error {
+var (
+	errNoPemBlock    = errors.New("no PEM block found")
+	errDigestNotSHA1 = errors.New("digest is not a SHA1 hash")
+	errNoPassphrase  = errors.New("key is encrypted but no passphrase was provided")
+	errNoRSAKey      = errors.New("key is not an RSA key")
+)
+
+type Signer interface {
+	Sign(data []byte) ([]byte, error)
+	KeyName() string
+}
+
+type Verifier interface {
+	Verify(data, signature []byte) error
+}
+
+type SignerVerifier interface {
+	Signer
+	Verifier
+}
+
+func NewKeySignerVerifier(privkeyFile, passphrase string) (SignerVerifier, error) {
+	pub, err := os.ReadFile(privkeyFile + ".pub")
+	if err != nil {
+		return nil, fmt.Errorf("read public key file: %w", err)
+	}
+	priv, err := os.ReadFile(privkeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("read private key file: %w", err)
+	}
+	return &keySignerVerifier{
+		pubKey:      pub,
+		privKey:     priv,
+		privkeyFile: privkeyFile,
+		passphrase:  passphrase,
+	}, nil
+}
+
+func NewKeyVerifier(pubkey []byte) Verifier {
+	return &keySignerVerifier{
+		pubKey: pubkey,
+	}
+}
+
+type keySignerVerifier struct {
+	privkeyFile     string
+	privKey, pubKey []byte
+	passphrase      string
+}
+
+func (s *keySignerVerifier) KeyName() string {
+	return filepath.Base(s.privkeyFile)
+}
+
+func (s *keySignerVerifier) Sign(data []byte) ([]byte, error) {
+	if len(data) != sha1.Size {
+		return nil, errDigestNotSHA1
+	}
+
+	block, _ := pem.Decode(s.privKey)
+	if block == nil {
+		return nil, errNoPemBlock
+	}
+
+	blockData := block.Bytes
+	if x509.IsEncryptedPEMBlock(block) { //nolint:staticcheck
+		if s.passphrase == "" {
+			return nil, errNoPassphrase
+		}
+
+		var decryptedBlockData []byte
+
+		decryptedBlockData, err := x509.DecryptPEMBlock(block, []byte(s.passphrase)) //nolint:staticcheck
+		if err != nil {
+			return nil, fmt.Errorf("decrypt private key PEM block: %w", err)
+		}
+
+		blockData = decryptedBlockData
+	}
+
+	priv, err := x509.ParsePKCS1PrivateKey(blockData)
+	if err != nil {
+		return nil, fmt.Errorf("parse PKCS1 private key: %w", err)
+	}
+
+	return priv.Sign(rand.Reader, data, crypto.SHA1)
+}
+
+func (s *keySignerVerifier) Verify(data, signature []byte) error {
+	if len(data) != sha1.Size {
+		return errDigestNotSHA1
+	}
+
+	block, _ := pem.Decode(s.pubKey)
+	if block == nil {
+		return errNoPemBlock
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse PKIX public key: %w", err)
+	}
+
+	rsaPub, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		return errNoRSAKey
+	}
+
+	return rsa.VerifyPKCS1v15(rsaPub, crypto.SHA1, data, signature)
+}
+
+func SignIndex(logger *log.Logger, signer Signer, indexFile string) error {
 	is, err := indexIsAlreadySigned(indexFile)
 	if err != nil {
 		return err
@@ -42,14 +158,14 @@ func SignIndex(logger *log.Logger, signingKey string, indexFile string) error {
 		return nil
 	}
 
-	logger.Printf("signing index %s with key %s", indexFile, signingKey)
+	logger.Printf("signing index %s with key %s", indexFile, signer.KeyName())
 
 	indexData, indexDigest, err := ReadAndHashIndexFile(indexFile)
 	if err != nil {
 		return err
 	}
 
-	sigData, err := RSASignSHA1Digest(indexDigest, signingKey, "")
+	sigData, err := signer.Sign(indexDigest)
 	if err != nil {
 		return fmt.Errorf("unable to sign index: %w", err)
 	}
@@ -57,7 +173,7 @@ func SignIndex(logger *log.Logger, signingKey string, indexFile string) error {
 	logger.Printf("appending signature to index %s", indexFile)
 
 	sigFS := memfs.New()
-	if err := sigFS.WriteFile(fmt.Sprintf(".SIGN.RSA.%s.pub", filepath.Base(signingKey)), sigData, 0644); err != nil {
+	if err := sigFS.WriteFile(fmt.Sprintf(".SIGN.RSA.%s.pub", signer.KeyName()), sigData, 0644); err != nil {
 		return fmt.Errorf("unable to append signature: %w", err)
 	}
 
@@ -90,7 +206,7 @@ func SignIndex(logger *log.Logger, signingKey string, indexFile string) error {
 		return fmt.Errorf("unable to write index data: %w", err)
 	}
 
-	logger.Printf("signed index %s with key %s", indexFile, signingKey)
+	logger.Printf("signed index %s with key %s", indexFile, signer.KeyName())
 
 	return nil
 }

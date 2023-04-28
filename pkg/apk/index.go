@@ -156,14 +156,15 @@ func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, o
 			}
 			var verified bool
 			keyData, ok := keys[matches[1]]
+
 			if ok {
-				if err := RSAVerifySHA1Digest(indexDigest, signature, keyData); err != nil {
+				if err := NewKeyVerifier(keyData).Verify(indexDigest, signature); err != nil {
 					verified = false
 				}
 			}
 			if !verified {
 				for _, keyData := range keys {
-					if err := RSAVerifySHA1Digest(indexDigest, signature, keyData); err == nil {
+					if err := NewKeyVerifier(keyData).Verify(indexDigest, signature); err == nil {
 						verified = true
 						break
 					}
