@@ -34,7 +34,6 @@ linters:
     - misspell
     - nakedret
     - nolintlint
-    - prealloc
     - predeclared
     - promlinter
     - revive
