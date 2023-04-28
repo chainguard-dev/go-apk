@@ -18,6 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -44,13 +45,19 @@ var (
 	errNoRSAKey      = errors.New("key is not an RSA key")
 )
 
+// Signer is responsible for signing the digest of some data and returning the signature.
 type Signer interface {
-	Sign(data []byte) ([]byte, error)
+	// Sign signs the given digest of some contents, and returns the signature.
+	Sign(ctx context.Context, digest []byte) ([]byte, error)
+
+	// KeyName returns the name of the key used to sign the data.
 	KeyName() string
 }
 
+// Verifier is responsible for verifying a signature against a digest.
 type Verifier interface {
-	Verify(data, signature []byte) error
+	// Verify verifies the given signature against the given digest.
+	Verify(ctx context.Context, digest, signature []byte) error
 }
 
 type SignerVerifier interface {
@@ -58,6 +65,7 @@ type SignerVerifier interface {
 	Verifier
 }
 
+// NewKeySignerVerifier returns a SignerVerifier that uses the given private key file to sign.
 func NewKeySignerVerifier(privkeyFile, passphrase string) (SignerVerifier, error) {
 	pub, err := os.ReadFile(privkeyFile + ".pub")
 	if err != nil {
@@ -75,6 +83,7 @@ func NewKeySignerVerifier(privkeyFile, passphrase string) (SignerVerifier, error
 	}, nil
 }
 
+// NewKeyVerifier returns a Verifier that uses the given public key to verify.
 func NewKeyVerifier(pubkey []byte) Verifier {
 	return &keySignerVerifier{
 		pubKey: pubkey,
@@ -91,8 +100,8 @@ func (s *keySignerVerifier) KeyName() string {
 	return filepath.Base(s.privkeyFile)
 }
 
-func (s *keySignerVerifier) Sign(data []byte) ([]byte, error) {
-	if len(data) != sha1.Size {
+func (s *keySignerVerifier) Sign(_ context.Context, digest []byte) ([]byte, error) {
+	if len(digest) != sha1.Size {
 		return nil, errDigestNotSHA1
 	}
 
@@ -122,11 +131,11 @@ func (s *keySignerVerifier) Sign(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("parse PKCS1 private key: %w", err)
 	}
 
-	return priv.Sign(rand.Reader, data, crypto.SHA1)
+	return priv.Sign(rand.Reader, digest, crypto.SHA1)
 }
 
-func (s *keySignerVerifier) Verify(data, signature []byte) error {
-	if len(data) != sha1.Size {
+func (s *keySignerVerifier) Verify(_ context.Context, digest, signature []byte) error {
+	if len(digest) != sha1.Size {
 		return errDigestNotSHA1
 	}
 
@@ -145,7 +154,7 @@ func (s *keySignerVerifier) Verify(data, signature []byte) error {
 		return errNoRSAKey
 	}
 
-	return rsa.VerifyPKCS1v15(rsaPub, crypto.SHA1, data, signature)
+	return rsa.VerifyPKCS1v15(rsaPub, crypto.SHA1, digest, signature)
 }
 
 func SignIndex(logger *log.Logger, signer Signer, indexFile string) error {
@@ -165,7 +174,7 @@ func SignIndex(logger *log.Logger, signer Signer, indexFile string) error {
 		return err
 	}
 
-	sigData, err := signer.Sign(indexDigest)
+	sigData, err := signer.Sign(context.Background(), indexDigest)
 	if err != nil {
 		return fmt.Errorf("unable to sign index: %w", err)
 	}

@@ -18,6 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -157,14 +158,15 @@ func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, o
 			var verified bool
 			keyData, ok := keys[matches[1]]
 
+			ctx := context.Background()
 			if ok {
-				if err := NewKeyVerifier(keyData).Verify(indexDigest, signature); err != nil {
+				if err := NewKeyVerifier(keyData).Verify(ctx, indexDigest, signature); err != nil {
 					verified = false
 				}
 			}
 			if !verified {
 				for _, keyData := range keys {
-					if err := NewKeyVerifier(keyData).Verify(indexDigest, signature); err == nil {
+					if err := NewKeyVerifier(keyData).Verify(ctx, indexDigest, signature); err == nil {
 						verified = true
 						break
 					}
