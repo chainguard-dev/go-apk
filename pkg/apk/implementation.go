@@ -409,7 +409,7 @@ func (a *APK) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflic
 }
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
-func (a *APK) FixateWorld(cache, updateCache, executeScripts bool, sourceDateEpoch *time.Time) error {
+func (a *APK) FixateWorld(sourceDateEpoch *time.Time) error {
 	/*
 		equivalent of: "apk fix --arch arch --root root"
 		with possible options for --no-scripts, --no-cache, --update-cache
@@ -461,7 +461,7 @@ func (a *APK) FixateWorld(cache, updateCache, executeScripts bool, sourceDateEpo
 			continue
 		}
 		// get the apk file
-		if err := a.installPackage(pkg, cache, updateCache, executeScripts, sourceDateEpoch); err != nil {
+		if err := a.installPackage(pkg, sourceDateEpoch); err != nil {
 			return err
 		}
 	}
@@ -544,8 +544,8 @@ func (a *APK) fetchAlpineKeys(versions []string) error {
 
 // installPkg install a single package and update installed db.
 //
-//nolint:unparam // we do not use some params... yet.
-func (a *APK) installPackage(pkg *repository.RepositoryPackage, cache, updateCache, executeScripts bool, sourceDateEpoch *time.Time) error {
+
+func (a *APK) installPackage(pkg *repository.RepositoryPackage, sourceDateEpoch *time.Time) error {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
 	u := pkg.Url()
