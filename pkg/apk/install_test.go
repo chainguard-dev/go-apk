@@ -42,11 +42,11 @@ func TestInstallAPKFiles(t *testing.T) {
 		// create a tgz stream with our files
 		entries := []testDirEntry{
 			// do the dirs first so we are assured they go in before files
-			{"etc", 0755, true, nil},
-			{"etc/foo", 0755, true, nil},
-			{"var", 0755, true, nil},
-			{"var/lib", 0755, true, nil},
-			{"var/lib/test", 0755, true, nil},
+			{"etc", 0o755, true, nil},
+			{"etc/foo", 0o755, true, nil},
+			{"var", 0o755, true, nil},
+			{"var/lib", 0o755, true, nil},
+			{"var/lib/test", 0o755, true, nil},
 
 			{"etc/foo/bar", 0644, false, []byte("hello world")},
 			{"var/lib/test/foobar", 0644, false, []byte("hello var/lib")},
@@ -105,13 +105,13 @@ func TestInstallAPKFiles(t *testing.T) {
 			// install a file in a known location
 			originalContent := []byte("hello world")
 			finalContent := []byte("extra long I am here")
-			overwriteFilename := "etc/doublewrite"
+			overwriteFilename := "etc/doublewrite" //nolint:goconst
 
 			pkg := &repository.Package{Name: "first", Origin: "first"}
 
 			entries := []testDirEntry{
-				{"etc", 0755, true, nil},
-				{overwriteFilename, 0755, false, originalContent},
+				{"etc", 0o755, true, nil},
+				{overwriteFilename, 0o755, false, originalContent},
 			}
 
 			r := testCreateTGZForPackage(entries)
@@ -125,7 +125,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.Equal(t, originalContent, actual)
 
 			entries = []testDirEntry{
-				{overwriteFilename, 0755, false, finalContent},
+				{overwriteFilename, 0o755, false, finalContent},
 			}
 
 			r = testCreateTGZForPackage(entries)
@@ -145,8 +145,8 @@ func TestInstallAPKFiles(t *testing.T) {
 			overwriteFilename := "etc/doublewrite"
 
 			entries := []testDirEntry{
-				{"etc", 0755, true, nil},
-				{overwriteFilename, 0755, false, originalContent},
+				{"etc", 0o755, true, nil},
+				{overwriteFilename, 0o755, false, originalContent},
 			}
 			pkg := &repository.Package{Name: "first", Origin: "first"}
 
@@ -161,7 +161,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.Equal(t, originalContent, actual)
 
 			entries = []testDirEntry{
-				{overwriteFilename, 0755, false, finalContent},
+				{overwriteFilename, 0o755, false, finalContent},
 			}
 
 			r = testCreateTGZForPackage(entries)
@@ -182,8 +182,8 @@ func TestInstallAPKFiles(t *testing.T) {
 			pkg := &repository.Package{Name: "first", Origin: "first"}
 
 			entries := []testDirEntry{
-				{"etc", 0755, true, nil},
-				{overwriteFilename, 0755, false, originalContent},
+				{"etc", 0o755, true, nil},
+				{overwriteFilename, 0o755, false, originalContent},
 			}
 
 			r := testCreateTGZForPackage(entries)
@@ -197,7 +197,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.Equal(t, originalContent, actual)
 
 			entries = []testDirEntry{
-				{overwriteFilename, 0755, false, originalContent},
+				{overwriteFilename, 0o755, false, originalContent},
 			}
 
 			r = testCreateTGZForPackage(entries)

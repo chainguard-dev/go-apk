@@ -347,12 +347,12 @@ func (a *APK) InitKeyring(keyFiles, extraKeyFiles []string) (err error) {
 
 			var data []byte
 			switch asURL.Scheme {
-			case "file":
+			case "file": //nolint:goconst
 				data, err = os.ReadFile(element)
 				if err != nil {
 					return fmt.Errorf("failed to read apk key: %w", err)
 				}
-			case "https":
+			case "https": //nolint:goconst
 				client := a.client
 				if client == nil {
 					client = &http.Client{}
@@ -403,11 +403,7 @@ func (a *APK) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflic
 	if err != nil {
 		return toInstall, conflicts, fmt.Errorf("error getting world packages: %w", err)
 	}
-	indexesInt := make([]NamedIndex, 0, len(indexes))
-	for _, index := range indexes {
-		indexesInt = append(indexesInt, index)
-	}
-	resolver := NewPkgResolver(indexesInt)
+	resolver := NewPkgResolver(indexes)
 	return resolver.GetPackagesWithDependencies(directPkgs)
 }
 

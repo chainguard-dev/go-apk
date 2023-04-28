@@ -139,7 +139,7 @@ func (a *APK) updateScriptsTar(pkg *repository.Package, controlTarGz io.Reader, 
 		}
 
 		// ignore .PKGINFO as it is not a script
-		if header.Name == ".PKGINFO" {
+		if header.Name == ".PKGINFO" { //nolint:goconst
 			continue
 		}
 
@@ -229,10 +229,12 @@ func (a *APK) readTriggers() (io.ReadCloser, error) {
 }
 
 // parseInstalled parses an installed file. It returns the installed packages.
-func parseInstalled(installed io.Reader) (packages []*InstalledPackage, err error) {
+func parseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint:gocyclo
 	if closer, ok := installed.(io.Closer); ok {
 		defer closer.Close()
 	}
+
+	packages := []*InstalledPackage{}
 
 	indexScanner := bufio.NewScanner(installed)
 
@@ -242,7 +244,7 @@ func parseInstalled(installed io.Reader) (packages []*InstalledPackage, err erro
 
 	for indexScanner.Scan() {
 		line := indexScanner.Text()
-		if len(line) == 0 {
+		if line == "" {
 			if pkg.Name != "" {
 				packages = append(packages, pkg)
 			}
@@ -367,7 +369,7 @@ func parseInstalled(installed io.Reader) (packages []*InstalledPackage, err erro
 		linenr++
 	}
 
-	return
+	return packages, nil
 }
 
 func parseInstalledPerms(permString string) (uid, gid int, perms int64, err error) {

@@ -181,7 +181,7 @@ func TestUpdateScriptsTar(t *testing.T) {
 			continue
 		}
 		var buf bytes.Buffer
-		_, err = io.Copy(&buf, tr)
+		_, err = io.Copy(&buf, tr) //nolint:gosec
 		require.NoError(t, err, "unable to read script %s: %v", header.Name, err)
 		foundScripts[header.Name] = buf.Bytes()
 	}
@@ -258,7 +258,7 @@ func TestUpdateTriggers(t *testing.T) {
 		require.Equal(t, strings.Join(parts[1:], " "), triggers, "expected triggers to be %s, got %s", triggers, strings.Join(parts[1:], " "))
 		return
 	}
-	// nolint:forbidigo // this is a valid use case
+	//nolint:forbidigo // this is a valid use case
 	t.Errorf("could not find entry for commit: %s", cksum)
 }
 

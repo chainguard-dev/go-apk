@@ -1,10 +1,9 @@
-// nolint:goheader
 // THIS FILE IS AN EXACT DUPLICATE OF STUFF IN ALPINE-GO!
 // Unfortunately, all of that is package-private rather than public,
 // so we are duplicating it here. As soon as we can upstream this entire impl,
 // this duplicate file goes away!
 
-// nolint:all
+//nolint:all
 package apk
 
 import (

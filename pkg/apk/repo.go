@@ -39,7 +39,7 @@ type namedRepositoryWithIndex struct {
 	repo *repository.RepositoryWithIndex
 }
 
-func NewNamedRepositoryWithIndex(name string, repo *repository.RepositoryWithIndex) *namedRepositoryWithIndex {
+func NewNamedRepositoryWithIndex(name string, repo *repository.RepositoryWithIndex) NamedIndex {
 	return &namedRepositoryWithIndex{
 		name: name,
 		repo: repo,
@@ -103,7 +103,7 @@ func (a *APK) GetRepositories() (repos []string, err error) {
 
 // getRepositoryIndexes returns the indexes for the repositories in the specified root.
 // The signatures for each index are verified unless ignoreSignatures is set to true.
-func (a *APK) getRepositoryIndexes(ignoreSignatures bool) ([]*namedRepositoryWithIndex, error) {
+func (a *APK) getRepositoryIndexes(ignoreSignatures bool) ([]NamedIndex, error) {
 	// get the repository URLs
 	repos, err := a.GetRepositories()
 	if err != nil {
@@ -260,7 +260,7 @@ func (p *PkgResolver) GetPackagesWithDependencies(packages []string) (toInstall 
 // Requires the existing set because the logic for resolving dependencies between competing
 // options may depend on whether or not one already is installed.
 // Must not modify the existing map directly.
-func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[string]*repository.RepositoryPackage) (pkg *repository.RepositoryPackage, dependencies []*repository.RepositoryPackage, conflicts []string, err error) {
+func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[string]*repository.RepositoryPackage) (*repository.RepositoryPackage, []*repository.RepositoryPackage, []string, error) {
 	parents := make(map[string]bool)
 	localExisting := make(map[string]*repository.RepositoryPackage)
 	for k, v := range existing {
@@ -274,15 +274,16 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 	if len(pkgs) == 0 {
 		return nil, nil, nil, fmt.Errorf("could not find package %s", pkgName)
 	}
-	pkg = pkgs[0]
+	pkg := pkgs[0]
 
-	_, _, _, pin := resolvePackageNameVersionPin(pkgName)
+	_, _, _, pin := resolvePackageNameVersionPin(pkgName) //nolint:dogsled
 	deps, conflicts, err := p.getPackageDependencies(pkg, pin, true, parents, localExisting)
 	if err != nil {
-		return
+		return nil, nil, nil, err
 	}
 	// eliminate duplication in dependencies
 	added := map[string]*repository.RepositoryPackage{}
+	dependencies := []*repository.RepositoryPackage{}
 	for _, dep := range deps {
 		if _, ok := added[dep.Name]; !ok {
 			dependencies = append(dependencies, dep)
@@ -327,7 +328,7 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 			}
 		}
 	}
-	return
+	return pkg, dependencies, conflicts, nil
 }
 
 // ResolvePackage given a single package name and optional version constraints, resolve to a list of packages
@@ -516,7 +517,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 // For example, if the original search was for package "a", then pkgs may contain some that
 // are named "a", but others that provided "a". In that case, we should look not at the
 // version of the package, but the version of "a" that the package provides.
-func sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPackage, name string, existing map[string]*repository.RepositoryPackage, pin string) {
+func sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPackage, name string, existing map[string]*repository.RepositoryPackage, pin string) { //nolint:gocyclo
 	// get existing origins
 	existingOrigins := map[string]bool{}
 	for _, pkg := range existing {

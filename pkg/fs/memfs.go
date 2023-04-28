@@ -41,7 +41,7 @@ func NewMemFS() FullFS {
 			dir:      true,
 			children: map[string]*node{},
 			name:     "/",
-			mode:     fs.ModeDir | 0755,
+			mode:     fs.ModeDir | 0o755,
 		},
 	}
 }
@@ -322,7 +322,7 @@ func (m *memFS) Chmod(path string, perm fs.FileMode) error {
 	anode.mode = perm | (anode.mode & os.ModeType)
 	return nil
 }
-func (m *memFS) Chown(path string, uid int, gid int) error {
+func (m *memFS) Chown(path string, uid, gid int) error {
 	anode, err := m.getNode(path)
 	if err != nil {
 		return err
@@ -348,7 +348,7 @@ func (m *memFS) Symlink(oldname, newname string) error {
 	}
 	anode.children[base] = &node{
 		name:       base,
-		mode:       0777 | os.ModeSymlink,
+		mode:       0o777 | os.ModeSymlink,
 		modTime:    time.Now(),
 		linkTarget: oldname,
 	}
@@ -416,10 +416,10 @@ type memFile struct {
 	openMode int
 }
 
-func newMemFile(node *node, name string, fs *memFS, openMode int) *memFile {
+func newMemFile(node *node, name string, memfs *memFS, openMode int) *memFile {
 	m := &memFile{
 		node:     node,
-		fs:       fs,
+		fs:       memfs,
 		name:     name,
 		openMode: openMode,
 	}

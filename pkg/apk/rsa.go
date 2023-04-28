@@ -1,4 +1,3 @@
-// nolint:goheader
 // From: https://raw.githubusercontent.com/goreleaser/nfpm/main/internal/sign/rsa.go
 // SPDX-License-Identifier: MIT
 
@@ -8,7 +7,7 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1" // nolint:gosec
+	"crypto/sha1" //nolint:gosec
 	"crypto/x509"
 	"encoding/pem"
 	"errors"

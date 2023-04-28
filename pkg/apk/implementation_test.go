@@ -125,7 +125,7 @@ func TestInitKeyring(t *testing.T) {
 	require.NoError(t, err)
 
 	keyPath := filepath.Join(dir, "alpine-devel@lists.alpinelinux.org-5e69ca50.rsa.pub")
-	err = os.WriteFile(keyPath, []byte(testDemoKey), 0o644)
+	err = os.WriteFile(keyPath, []byte(testDemoKey), 0o644) //nolint:gosec
 	require.NoError(t, err)
 
 	// Add a local file and a remote key

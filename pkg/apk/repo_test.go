@@ -27,13 +27,13 @@ import (
 
 func TestGetRepositoryIndexes(t *testing.T) {
 	src := apkfs.NewMemFS()
-	err := src.MkdirAll("etc/apk", 0755)
+	err := src.MkdirAll("etc/apk", 0o755)
 	require.NoError(t, err, "unable to mkdir /etc/apk")
-	err = src.WriteFile(reposFilePath, []byte("https://dl-cdn.alpinelinux.org/alpine/v3.16/main"), 0644)
+	err = src.WriteFile(reposFilePath, []byte("https://dl-cdn.alpinelinux.org/alpine/v3.16/main"), 0o644)
 	require.NoErrorf(t, err, "unable to write repositories")
-	err = src.WriteFile(archFilePath, []byte("aarch64\n"), 0644)
+	err = src.WriteFile(archFilePath, []byte("aarch64\n"), 0o644)
 	require.NoErrorf(t, err, "unable to write arch")
-	err = src.MkdirAll(keysDirPath, 0755)
+	err = src.MkdirAll(keysDirPath, 0o755)
 	require.NoError(t, err, "unable to mkdir /etc/apk/keys")
 	err = src.WriteFile("etc/apk/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub", []byte(`
 -----BEGIN PUBLIC KEY-----
@@ -49,7 +49,7 @@ HwsGXBTVcfXg44RLyL8Lk/2dQxDHNHzAUslJXzPxaHBLmt++2COa2EI1iWlvtznk
 Ok9WP8SOAIj+xdqoiHcC4j72BOVVgiITIJNHrbppZCq6qPR+fgXmXa+sDcGh30m6
 9Wpbr28kLMSHiENCWTdsFij+NQTd5S47H7XTROHnalYDuF1RpS+DpQidT5tUimaT
 JZDr++FjKrnnijbyNF8b98UCAwEAAQ==
------END PUBLIC KEY-----`), 0644)
+-----END PUBLIC KEY-----`), 0o644)
 	require.NoError(t, err, "unable to write key")
 	err = src.WriteFile("etc/apk/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub", []byte(`
 -----BEGIN PUBLIC KEY-----
@@ -65,7 +65,7 @@ Lxy+3ek0cqcI7K68EtrffU8jtUj9LFTUC8dERaIBs7NgQ/LfDbDfGh9g6qVj1hZl
 k9aaIPTm/xsi8v3u+0qaq7KzIBc9s59JOoA8TlpOaYdVgSQhHHLBaahOuAigH+VI
 isbC9vmqsThF2QdDtQt37keuqoda2E6sL7PUvIyVXDRfwX7uMDjlzTxHTymvq2Ck
 htBqojBnThmjJQFgZXocHG8CAwEAAQ==
------END PUBLIC KEY-----`), 0644)
+-----END PUBLIC KEY-----`), 0o644)
 	require.NoError(t, err, "unable to write key")
 
 	a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))

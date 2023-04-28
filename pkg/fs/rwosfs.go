@@ -238,7 +238,7 @@ func (f *dirFS) open(name string) (*fileImpl, error) {
 			return nil, fmt.Errorf("unable to stat file %s: %w", fullpath, err)
 		}
 		// Try to change permissions and open again.
-		if err := os.Chmod(fullpath, 0600); err != nil {
+		if err := os.Chmod(fullpath, 0o600); err != nil {
 			return nil, fmt.Errorf("unable to read file or change permissions: %s", name)
 		}
 		file, err = os.Open(fullpath)
@@ -441,7 +441,9 @@ func (f *dirFS) Link(oldname, newname string) error {
 		return fmt.Errorf("hardlink target %s is outside of the filesystem", target)
 	}
 	if f.createOnDisk(newname) {
-		_ = os.Link(target, filepath.Join(f.base, newname))
+		if err := os.Link(target, filepath.Join(f.base, newname)); err != nil {
+			return err
+		}
 	}
 	return f.overrides.Link(oldname, newname)
 }
@@ -451,7 +453,9 @@ func (f *dirFS) Symlink(oldname, newname string) error {
 	// If it is outside of the base, it will be resolved by Readlink.
 	// This enables proper symlink behaviour.
 	if f.createOnDisk(newname) {
-		_ = os.Symlink(oldname, filepath.Join(f.base, newname))
+		if err := os.Symlink(oldname, filepath.Join(f.base, newname)); err != nil {
+			return err
+		}
 	}
 	return f.overrides.Symlink(oldname, newname)
 }
@@ -485,7 +489,7 @@ func (f *dirFS) Chmod(path string, perm fs.FileMode) error {
 	}
 	return f.overrides.Chmod(path, perm)
 }
-func (f *dirFS) Chown(path string, uid int, gid int) error {
+func (f *dirFS) Chown(path string, uid, gid int) error {
 	if f.caseSensitiveOnDisk(path) {
 		// ignore error, as we track it in memory anyways, and disk filesystem might not support it
 		_ = os.Chown(filepath.Join(f.base, path), uid, gid)
@@ -498,7 +502,9 @@ func (f *dirFS) Mknod(name string, mode uint32, dev int) error {
 		err := unix.Mknod(filepath.Join(f.base, name), mode, dev)
 		// what if we could not create it? Just create a regular file there, and memory will override
 		if err != nil {
-			_ = os.WriteFile(filepath.Join(f.base, name), nil, 0)
+			if err := os.WriteFile(filepath.Join(f.base, name), nil, 0); err != nil {
+				return err
+			}
 		}
 	}
 	return f.overrides.Mknod(name, mode, dev)
@@ -575,12 +581,13 @@ type fileImpl struct {
 }
 
 func (f fileImpl) Close() error {
-	if f.perms != nil {
-		defer func() {
-			_ = os.Chmod(f.name, *f.perms)
-		}()
+	if err := f.file.Close(); err != nil {
+		return err
 	}
-	return f.file.Close()
+	if f.perms == nil {
+		return os.Chmod(f.name, *f.perms)
+	}
+	return nil
 }
 
 type fileInfo struct {

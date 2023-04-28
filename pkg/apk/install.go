@@ -18,7 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"crypto/sha1" // nolint:gosec // this is what apk tools is using
+	"crypto/sha1" //nolint:gosec // this is what apk tools is using
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -64,7 +64,7 @@ func (a *APK) writeOneFile(header *tar.Header, r io.Reader, allowOverwrite bool)
 // installAPKFiles install the files from the APK and return the list of installed files
 // and their permissions. Returns a tar.Header because it is a convenient existing
 // struct that has all of the fields we need.
-func (a *APK) installAPKFiles(gzipIn io.Reader, origin string) ([]tar.Header, error) {
+func (a *APK) installAPKFiles(gzipIn io.Reader, origin string) ([]tar.Header, error) { //nolint:gocyclo
 	var files []tar.Header
 	gr, err := gzip.NewReader(gzipIn)
 	if err != nil {
