@@ -57,10 +57,7 @@ func testGetTestAPK() (*APK, apkfs.FullFS, error) {
 			return nil
 		}
 		if d.IsDir() {
-			if err := src.MkdirAll(path, d.Type()); err != nil {
-				return err
-			}
-			return nil
+			return src.MkdirAll(path, d.Type())
 		}
 		r, err := filesystem.Open(path)
 		if err != nil {
