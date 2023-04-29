@@ -51,9 +51,6 @@ func NewMemFS() FullFS {
 // getNode returns the node for the given path. If the path is not found, it
 // returns an error
 func (m *memFS) getNode(path string) (*node, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if path == "/" || path == "." {
 		return m.tree, nil
 	}
@@ -67,8 +64,9 @@ func (m *memFS) getNode(path string) (*node, error) {
 		if node.children == nil {
 			return nil, os.ErrNotExist
 		}
-		var ok bool
+		node.mu.Lock()
 		childNode, ok := node.children[part]
+		node.mu.Unlock()
 		if !ok {
 			return nil, os.ErrNotExist
 		}
@@ -103,6 +101,9 @@ func (m *memFS) Mkdir(path string, perms fs.FileMode) error {
 	if anode.mode&fs.ModeDir == 0 {
 		return fmt.Errorf("parent is not a directory")
 	}
+
+	anode.mu.Lock()
+	defer anode.mu.Unlock()
 	// see if it exists
 	if _, ok := anode.children[filepath.Base(path)]; ok {
 		return os.ErrExist
@@ -154,6 +155,8 @@ func (m *memFS) MkdirAll(path string, perm fs.FileMode) error {
 			anode.children = map[string]*node{}
 		}
 		var ok bool
+
+		anode.mu.Lock()
 		newnode, ok := anode.children[part]
 		if !ok {
 			newnode = &node{
@@ -166,6 +169,8 @@ func (m *memFS) MkdirAll(path string, perm fs.FileMode) error {
 			}
 			anode.children[part] = newnode
 		}
+		anode.mu.Unlock()
+
 		// what if it is a symlink?
 		if newnode.mode&os.ModeSymlink != 0 {
 			linkTarget := newnode.linkTarget
@@ -205,6 +210,7 @@ func (m *memFS) OpenFile(name string, flag int, perm fs.FileMode) (File, error) 
 	if parentAnode.children == nil {
 		parentAnode.children = map[string]*node{}
 	}
+	parentAnode.mu.Lock()
 	anode, ok := parentAnode.children[base]
 	if !ok && flag&os.O_CREATE == 0 {
 		return nil, os.ErrNotExist
@@ -223,6 +229,7 @@ func (m *memFS) OpenFile(name string, flag int, perm fs.FileMode) (File, error) 
 		}
 		parentAnode.children[base] = anode
 	}
+	parentAnode.mu.Unlock()
 	// what if it is a symlink? Follow the symlink
 	if anode.mode&os.ModeSymlink != 0 {
 		linkTarget := anode.linkTarget
@@ -286,6 +293,7 @@ func (m *memFS) Mknod(path string, mode uint32, dev int) error {
 	if err != nil {
 		return err
 	}
+	anode.mu.Lock()
 	if _, ok := anode.children[base]; ok {
 		return os.ErrExist
 	}
@@ -297,6 +305,7 @@ func (m *memFS) Mknod(path string, mode uint32, dev int) error {
 		major:      unix.Major(uint64(dev)),
 		minor:      unix.Minor(uint64(dev)),
 	}
+	anode.mu.Unlock()
 
 	return nil
 }
@@ -308,10 +317,12 @@ func (m *memFS) Readnod(path string) (dev int, err error) {
 	if err != nil {
 		return 0, err
 	}
+	parentNode.mu.Lock()
 	anode, ok := parentNode.children[base]
 	if !ok {
 		return 0, os.ErrNotExist
 	}
+	parentNode.mu.Unlock()
 	if anode.mode&os.ModeDevice != os.ModeDevice || anode.mode&os.ModeCharDevice != os.ModeCharDevice {
 		return 0, fmt.Errorf("not a device")
 	}
@@ -348,6 +359,8 @@ func (m *memFS) Symlink(oldname, newname string) error {
 	if err != nil {
 		return err
 	}
+	anode.mu.Lock()
+	defer anode.mu.Unlock()
 	if _, ok := anode.children[base]; ok {
 		return os.ErrExist
 	}
@@ -367,14 +380,18 @@ func (m *memFS) Link(oldname, newname string) error {
 	if err != nil {
 		return err
 	}
+	anode.mu.Lock()
 	if _, ok := anode.children[base]; ok {
 		return os.ErrExist
 	}
+	anode.mu.Unlock()
 	target, err := m.getNode(oldname)
 	if err != nil {
 		return os.ErrNotExist
 	}
+	anode.mu.Lock()
 	anode.children[base] = target
+	anode.mu.Unlock()
 	target.linkCount++
 	return nil
 }
@@ -386,6 +403,8 @@ func (m *memFS) Readlink(name string) (target string, err error) {
 	if err != nil {
 		return "", err
 	}
+	parentNode.mu.Lock()
+	defer parentNode.mu.Unlock()
 	anode, ok := parentNode.children[base]
 	if !ok {
 		return "", os.ErrNotExist
@@ -403,6 +422,8 @@ func (m *memFS) Remove(name string) error {
 	if err != nil {
 		return err
 	}
+	anode.mu.Lock()
+	defer anode.mu.Unlock()
 	if _, ok := anode.children[base]; !ok {
 		return os.ErrNotExist
 	}
@@ -519,7 +540,9 @@ type node struct {
 	linkTarget   string
 	linkCount    int // extra links, so 0 means a single pointer. O-based, like most compuuter counting systems.
 	major, minor uint32
-	children     map[string]*node
+
+	mu       sync.Mutex
+	children map[string]*node
 }
 
 func (n *node) fileInfo(name string) fs.FileInfo {
