@@ -233,7 +233,3 @@ func TestLoadSystemKeyring(t *testing.T) {
 		})
 	}
 }
-
-func TestFixateWorld(t *testing.T) {
-
-}

@@ -33,7 +33,6 @@ import (
 const pathSep = "/"
 
 type memFS struct {
-	mu   sync.Mutex
 	tree *node
 }
 
