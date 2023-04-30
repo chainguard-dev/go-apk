@@ -16,6 +16,7 @@ package apk
 
 import (
 	"archive/tar"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -593,35 +594,26 @@ func (a *APK) installPackage(pkg *repository.RepositoryPackage, cache, updateCac
 	}
 
 	// install the apk file
-	expanded, err := expandApk(r)
+	expanded, err := ExpandApk(r)
 	if err != nil {
 		return fmt.Errorf("unable to expand apk for package %s: %w", pkg.Name, err)
 	}
-	gzipIn, err := os.Open(expanded.PackageDataTarGzFilename)
-	if err != nil {
-		return fmt.Errorf("could not open package data file %s for reading: %w", expanded.PackageDataTarGzFilename, err)
-	}
-	installedFiles, err := a.installAPKFiles(gzipIn, pkg.Origin)
+	defer expanded.Close()
+	installedFiles, err := a.installAPKFiles(expanded.PackageData, pkg.Origin)
 	if err != nil {
 		return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 	}
 
 	// update the scripts.tar
-	in, err := os.Open(expanded.ControlDataTarGzFilename)
-	if err != nil {
-		return fmt.Errorf("unable to open control tar file %s: %w", expanded.ControlDataTarGzFilename, err)
-	}
-	defer in.Close()
+	buf := bytes.NewBuffer(expanded.ControlData)
 
-	if err := a.updateScriptsTar(pkg.Package, in, sourceDateEpoch); err != nil {
+	if err := a.updateScriptsTar(pkg.Package, buf, sourceDateEpoch); err != nil {
 		return fmt.Errorf("unable to update scripts.tar for pkg %s: %w", pkg.Name, err)
 	}
 
 	// update the triggers
-	if _, err := in.Seek(0, 0); err != nil {
-		return fmt.Errorf("unable to seek to beginning of control tar file %s: %w", expanded.ControlDataTarGzFilename, err)
-	}
-	if err := a.updateTriggers(pkg.Package, in); err != nil {
+	buf.Reset()
+	if err := a.updateTriggers(pkg.Package, buf); err != nil {
 		return fmt.Errorf("unable to update triggers for pkg %s: %w", pkg.Name, err)
 	}
 
