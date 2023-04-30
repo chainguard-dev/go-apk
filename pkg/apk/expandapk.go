@@ -20,9 +20,9 @@ import (
 // The length of a gzip header
 const gzipHeaderLength = 10
 
-// This structure is returned by expandApk() below to provide temporary file locations for
-// the file stream containing the control data (a.k.a. ".PKGINFO") in tar.gz format
-type apkExpanded struct {
+// APKExpanded contains information about and reference to an expanded APK package.
+// Close() deletes all temporary files and directories created during the expansion process.
+type APKExpanded struct {
 	// The size in bytes of the entire apk (sum of all tar.gz file sizes)
 	Size int64
 
@@ -31,18 +31,25 @@ type apkExpanded struct {
 	Signed bool
 
 	// The temporary parent directory containing all exploded .tar/.tar.gz contents
-	TempDir string
+	tempDir string
 
-	// The temp file containing the package signature (a.k.a. ".SIGN...") in tar.gz format
-	// Note: currently unused
-	SignatureTarGzFilename string
+	// The package signature (a.k.a. ".SIGN...") in tar.gz format
+	Signature []byte
 
-	// The temp file containing the control data (a.k.a. ".PKGINFO") in tar.gz format
-	ControlDataTarGzFilename string
+	// the control data (a.k.a. ".PKGINFO") in tar.gz format
+	ControlData []byte
 
-	// The temp file containing the actual package contents in tar.gz format
-	// Note: currently unused
-	PackageDataTarGzFilename string
+	// A stream reader to the contents in tar.gz format
+	PackageData io.ReadCloser
+}
+
+func (a *APKExpanded) Close() error {
+	if a.PackageData != nil {
+		if err := a.PackageData.Close(); err != nil {
+			return fmt.Errorf("APKExpanded.Close error 1: %v", err)
+		}
+	}
+	return os.RemoveAll(a.tempDir)
 }
 
 // An implementation of io.Writer designed specifically for use in the expandApk() method.
@@ -176,6 +183,9 @@ func (r *expandApkReader) EnableFastRead() {
 	r.fast = true
 }
 
+// ExpandAPK given a ready to an apk stream, normally a tar stream with gzip compression,
+// expand it into its components.
+//
 // An apk is split into either 2 or 3 file streams (2 for unsigned packages, 3 for signed).
 //
 // For more info, see https://wiki.alpinelinux.org/wiki/Apk_spec:
@@ -183,7 +193,10 @@ func (r *expandApkReader) EnableFastRead() {
 //	"APK v2 packages contain two tar segments followed by a tarball each in their
 //	own gzip stream (3 streams total). These streams contain the package signature,
 //	control data, and package data"
-func expandApk(source io.Reader) (*apkExpanded, error) {
+//
+// Returns an APKExpanded struct containing references to the file. You *must* call APKExpanded.Close()
+// when finished to clean up the various files.
+func ExpandApk(source io.Reader) (*APKExpanded, error) {
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, err
@@ -305,15 +318,29 @@ func expandApk(source io.Reader) (*apkExpanded, error) {
 		return nil, fmt.Errorf("invalid number of tar streams: %d", numGzipStreams)
 	}
 
-	expanded := apkExpanded{
-		TempDir:                  dir,
-		Signed:                   signed,
-		Size:                     totalSize,
-		ControlDataTarGzFilename: gzipStreams[controlDataIndex],
-		PackageDataTarGzFilename: gzipStreams[controlDataIndex+1],
+	controlData, err := os.ReadFile(gzipStreams[controlDataIndex])
+	if err != nil {
+		return nil, fmt.Errorf("unable to read control data: %w", err)
+	}
+
+	packageData, err := os.Open(gzipStreams[controlDataIndex+1])
+	if err != nil {
+		return nil, fmt.Errorf("could not open package data file %s for reading: %w", gzipStreams[controlDataIndex+1], err)
+	}
+
+	expanded := APKExpanded{
+		tempDir:     dir,
+		Signed:      signed,
+		Size:        totalSize,
+		ControlData: controlData,
+		PackageData: packageData,
 	}
 	if signed {
-		expanded.SignatureTarGzFilename = gzipStreams[0]
+		b, err := os.ReadFile(gzipStreams[0])
+		if err != nil {
+			return nil, fmt.Errorf("could not read signature file %s: %w", gzipStreams[0], err)
+		}
+		expanded.Signature = b
 	}
 
 	return &expanded, nil
