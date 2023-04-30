@@ -605,15 +605,17 @@ func (a *APK) installPackage(pkg *repository.RepositoryPackage, cache, updateCac
 	}
 
 	// update the scripts.tar
-	buf := bytes.NewBuffer(expanded.ControlData)
+	controlData := bytes.NewReader(expanded.ControlData)
 
-	if err := a.updateScriptsTar(pkg.Package, buf, sourceDateEpoch); err != nil {
+	if err := a.updateScriptsTar(pkg.Package, controlData, sourceDateEpoch); err != nil {
 		return fmt.Errorf("unable to update scripts.tar for pkg %s: %w", pkg.Name, err)
 	}
 
 	// update the triggers
-	buf.Reset()
-	if err := a.updateTriggers(pkg.Package, buf); err != nil {
+	if _, err := controlData.Seek(0, 0); err != nil {
+		return fmt.Errorf("unable to seek to start of control data for pkg %s: %w", pkg.Name, err)
+	}
+	if err := a.updateTriggers(pkg.Package, controlData); err != nil {
 		return fmt.Errorf("unable to update triggers for pkg %s: %w", pkg.Name, err)
 	}
 
