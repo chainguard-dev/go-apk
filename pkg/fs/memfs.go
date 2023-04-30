@@ -49,11 +49,18 @@ func NewMemFS() FullFS {
 }
 
 // getNode returns the node for the given path. If the path is not found, it
-// returns an error
+// returns an error. This locks the tree for the duration of the call, which is inefficient
+// and will slow things down. Eventually, we want to get to more fine-grained locking.
 func (m *memFS) getNode(path string) (*node, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.getNodeNoLock(path)
+}
 
+// getNodeNoLock returns the node for the given path. If the path is not found, it
+// returns an error.
+// getNode is *not* thread-safe. If you need to lock the tree, use getNodeLock.
+func (m *memFS) getNodeNoLock(path string) (*node, error) {
 	if path == "/" || path == "." {
 		return m.tree, nil
 	}
@@ -82,7 +89,7 @@ func (m *memFS) getNode(path string) (*node, error) {
 			if !filepath.IsAbs(linkTarget) {
 				linkTarget = filepath.Join(strings.Join(traversed, pathSep), linkTarget)
 			}
-			targetNode, err := m.getNode(linkTarget)
+			targetNode, err := m.getNodeNoLock(linkTarget)
 			if err != nil {
 				return nil, err
 			}
