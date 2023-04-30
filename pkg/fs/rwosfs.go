@@ -584,7 +584,7 @@ func (f fileImpl) Close() error {
 	if err := f.file.Close(); err != nil {
 		return err
 	}
-	if f.perms == nil {
+	if f.perms != nil {
 		return os.Chmod(f.name, *f.perms)
 	}
 	return nil
