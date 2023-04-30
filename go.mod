@@ -6,7 +6,7 @@ require (
 	github.com/psanford/memfs v0.0.0-20230130182539-4dbf7e3e865e
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.2
-	gitlab.alpinelinux.org/alpine/go v0.6.0
+	gitlab.alpinelinux.org/alpine/go v0.6.1-0.20230428211436-f22972d078c8
 	go.lsp.dev/uri v0.3.0
 	golang.org/x/build v0.0.0-20220928220451-9294235e16f5
 	golang.org/x/sync v0.1.0

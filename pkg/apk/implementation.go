@@ -599,7 +599,7 @@ func (a *APK) installPackage(pkg *repository.RepositoryPackage, cache, updateCac
 		return fmt.Errorf("unable to expand apk for package %s: %w", pkg.Name, err)
 	}
 	defer expanded.Close()
-	installedFiles, err := a.installAPKFiles(expanded.PackageData, pkg.Origin)
+	installedFiles, err := a.installAPKFiles(expanded.PackageData, pkg.Origin, pkg.Replaces)
 	if err != nil {
 		return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 	}
