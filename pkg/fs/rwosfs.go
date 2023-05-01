@@ -50,7 +50,7 @@ func DirFSWithCaseSensitive(caseSensitive bool) DirFSOption {
 
 // WithCreateDir allows you to specify whether the underlying directory
 // should be created if it does not exist. Default is false.
-func WithCreateDir(createDir bool) DirFSOption {
+func WithCreateDir() DirFSOption {
 	return func(opts *dirFSOpts) error {
 		opts.mkdir = true
 		return nil

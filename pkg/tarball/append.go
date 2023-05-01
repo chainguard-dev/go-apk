@@ -77,9 +77,5 @@ func (m *MultiTar) Close() error {
 		return err
 	}
 
-	if err := m.out.Close(); err != nil {
-		return err
-	}
-
-	return nil
+	return m.out.Close()
 }
