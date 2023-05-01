@@ -22,17 +22,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/psanford/memfs"
 
+	"github.com/chainguard-dev/go-apk/pkg/logger"
 	"github.com/chainguard-dev/go-apk/pkg/tarball"
 )
 
-func SignIndex(logger *log.Logger, signingKey string, indexFile string) error {
+func SignIndex(logger logger.Logger, signingKey string, indexFile string) error {
 	is, err := indexIsAlreadySigned(indexFile)
 	if err != nil {
 		return err
