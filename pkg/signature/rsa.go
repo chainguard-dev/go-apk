@@ -1,7 +1,7 @@
 // From: https://raw.githubusercontent.com/goreleaser/nfpm/main/internal/sign/rsa.go
 // SPDX-License-Identifier: MIT
 
-package apk
+package signature
 
 import (
 	"crypto"
