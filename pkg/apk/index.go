@@ -28,6 +28,7 @@ import (
 	"regexp"
 	"strings"
 
+	sign "github.com/chainguard-dev/go-apk/pkg/signature"
 	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.lsp.dev/uri"
 )
@@ -146,7 +147,7 @@ func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, o
 			readBytes := allBytes - unreadBytes
 			indexData := b[readBytes:]
 
-			indexDigest, err := HashData(indexData)
+			indexDigest, err := sign.HashData(indexData)
 			if err != nil {
 				return nil, err
 			}
@@ -157,13 +158,13 @@ func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, o
 			var verified bool
 			keyData, ok := keys[matches[1]]
 			if ok {
-				if err := RSAVerifySHA1Digest(indexDigest, signature, keyData); err != nil {
+				if err := sign.RSAVerifySHA1Digest(indexDigest, signature, keyData); err != nil {
 					verified = false
 				}
 			}
 			if !verified {
 				for _, keyData := range keys {
-					if err := RSAVerifySHA1Digest(indexDigest, signature, keyData); err == nil {
+					if err := sign.RSAVerifySHA1Digest(indexDigest, signature, keyData); err == nil {
 						verified = true
 						break
 					}
