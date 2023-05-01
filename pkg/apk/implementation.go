@@ -35,12 +35,13 @@ import (
 	"golang.org/x/sys/unix"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
+	logger "github.com/chainguard-dev/go-apk/pkg/logger"
 )
 
 type APK struct {
 	arch              string
 	version           string
-	logger            Logger
+	logger            logger.Logger
 	fs                apkfs.FullFS
 	executor          Executor
 	ignoreMknodErrors bool

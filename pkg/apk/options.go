@@ -19,11 +19,12 @@ import (
 	"runtime"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
+	logger "github.com/chainguard-dev/go-apk/pkg/logger"
 	"github.com/sirupsen/logrus"
 )
 
 type opts struct {
-	logger            Logger
+	logger            logger.Logger
 	executor          Executor
 	arch              string
 	ignoreMknodErrors bool
@@ -34,7 +35,7 @@ type opts struct {
 type Option func(*opts) error
 
 // WithLogger logger to use. If not provided, will discard all log messages.
-func WithLogger(logger Logger) Option {
+func WithLogger(logger logger.Logger) Option {
 	return func(o *opts) error {
 		o.logger = logger
 		return nil

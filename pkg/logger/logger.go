@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package apk
+package logger
 
 type Logger interface {
 	Infof(string, ...interface{})
 	Warnf(string, ...interface{})
 	Debugf(string, ...interface{})
+	Printf(string, ...interface{})
 }
