@@ -76,7 +76,7 @@ type repositoryPackage struct {
 func (a *APK) SetRepositories(repos []string) error {
 	a.logger.Infof("setting apk repositories")
 
-	data := strings.Join(repos, "\n")
+	data := strings.Join(repos, "\n") + "\n"
 
 	// #nosec G306 -- apk repositories must be publicly readable
 	if err := a.fs.WriteFile(filepath.Join("etc", "apk", "repositories"),

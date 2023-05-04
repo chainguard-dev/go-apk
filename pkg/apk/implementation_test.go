@@ -112,7 +112,7 @@ func TestSetRepositories(t *testing.T) {
 	actual, err := src.ReadFile("etc/apk/repositories")
 	require.NoError(t, err)
 
-	expected := strings.Join(repos, "\n")
+	expected := strings.Join(repos, "\n") + "\n"
 	require.Equal(t, expected, string(actual), "unexpected content for etc/apk/repositories:\nexpected %s\nactual %s", expected, actual)
 }
 
