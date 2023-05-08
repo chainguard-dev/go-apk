@@ -190,6 +190,19 @@ const (
 	less    versionCompare = 2
 )
 
+func (vc versionCompare) String() string {
+	switch vc {
+	case greater:
+		return ">"
+	case equal:
+		return "="
+	case less:
+		return "<"
+	default:
+		return "???"
+	}
+}
+
 // compare versions based on https://dev.gentoo.org/~ulm/pms/head/pms.html#x1-250003.2
 func compareVersions(actual, required packageVersion) versionCompare {
 	for i := 0; i < len(actual.numbers) && i < len(required.numbers); i++ {
