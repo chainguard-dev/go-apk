@@ -410,7 +410,8 @@ func (a *APK) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflic
 }
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
-func (a *APK) FixateWorld(sourceDateEpoch *time.Time) error {
+// It returns the collection of installed packages on success.
+func (a *APK) FixateWorld(sourceDateEpoch *time.Time) ([]*repository.RepositoryPackage, error) {
 	/*
 		equivalent of: "apk fix --arch arch --root root"
 		with possible options for --no-scripts, --no-cache, --update-cache
@@ -422,14 +423,14 @@ func (a *APK) FixateWorld(sourceDateEpoch *time.Time) error {
 	// to fix the world, we need to:
 	// 1. Get the apkIndexes for each repository for the target arch
 	if err := a.lock(); err != nil {
-		return fmt.Errorf("failed to lock: %w", err)
+		return nil, fmt.Errorf("failed to lock: %w", err)
 	}
 	defer func() {
 		_ = a.unlock()
 	}()
 	allpkgs, conflicts, err := a.ResolveWorld()
 	if err != nil {
-		return fmt.Errorf("error getting package dependencies: %w", err)
+		return nil, fmt.Errorf("error getting package dependencies: %w", err)
 	}
 
 	// 3. For each name on the list:
@@ -441,32 +442,32 @@ func (a *APK) FixateWorld(sourceDateEpoch *time.Time) error {
 	//     e. Update the installed file
 	dir, err := os.MkdirTemp("", "go-apk")
 	if err != nil {
-		return fmt.Errorf("could not make temp dir: %w", err)
+		return nil, fmt.Errorf("could not make temp dir: %w", err)
 	}
 	defer os.RemoveAll(dir)
 	for _, pkg := range conflicts {
 		isInstalled, err := a.isInstalledPackage(pkg)
 		if err != nil {
-			return fmt.Errorf("error checking if package %s is installed: %w", pkg, err)
+			return nil, fmt.Errorf("error checking if package %s is installed: %w", pkg, err)
 		}
 		if isInstalled {
-			return fmt.Errorf("cannot install due to conflict with %s", pkg)
+			return nil, fmt.Errorf("cannot install due to conflict with %s", pkg)
 		}
 	}
 	for _, pkg := range allpkgs {
 		isInstalled, err := a.isInstalledPackage(pkg.Name)
 		if err != nil {
-			return fmt.Errorf("error checking if package %s is installed: %w", pkg.Name, err)
+			return nil, fmt.Errorf("error checking if package %s is installed: %w", pkg.Name, err)
 		}
 		if isInstalled {
 			continue
 		}
 		// get the apk file
 		if err := a.installPackage(pkg, sourceDateEpoch); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return allpkgs, nil
 }
 
 type NoKeysFoundError struct {
