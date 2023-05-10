@@ -41,6 +41,7 @@ func NewMemFS() FullFS {
 		tree: &node{
 			dir:      true,
 			children: map[string]*node{},
+			xattrs:   map[string][]byte{},
 			name:     "/",
 			mode:     fs.ModeDir | 0o755,
 		},
@@ -121,6 +122,7 @@ func (m *memFS) Mkdir(path string, perms fs.FileMode) error {
 		modTime:    time.Now(),
 		createTime: time.Now(),
 		children:   map[string]*node{},
+		xattrs:     map[string][]byte{},
 	}
 	return nil
 }
@@ -171,6 +173,7 @@ func (m *memFS) MkdirAll(path string, perm fs.FileMode) error {
 				modTime:    time.Now(),
 				createTime: time.Now(),
 				children:   map[string]*node{},
+				xattrs:     map[string][]byte{},
 			}
 			anode.children[part] = newnode
 		}
@@ -231,6 +234,7 @@ func (m *memFS) OpenFile(name string, flag int, perm fs.FileMode) (File, error) 
 			dir:        false,
 			modTime:    time.Now(),
 			createTime: time.Now(),
+			xattrs:     map[string][]byte{},
 		}
 		parentAnode.children[base] = anode
 	}
@@ -310,6 +314,7 @@ func (m *memFS) Mknod(path string, mode uint32, dev int) error {
 		createTime: time.Now(),
 		major:      unix.Major(uint64(dev)),
 		minor:      unix.Minor(uint64(dev)),
+		xattrs:     map[string][]byte{},
 	}
 
 	return nil
@@ -374,6 +379,7 @@ func (m *memFS) Symlink(oldname, newname string) error {
 		mode:       0o777 | os.ModeSymlink,
 		modTime:    time.Now(),
 		linkTarget: oldname,
+		xattrs:     map[string][]byte{},
 	}
 	return nil
 }
@@ -435,6 +441,62 @@ func (m *memFS) Remove(name string) error {
 	}
 	delete(anode.children, base)
 	return nil
+}
+
+func (m *memFS) SetXattr(path string, attr string, data []byte) error {
+	node, err := m.getNode(path)
+	if err != nil {
+		return os.ErrNotExist
+	}
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	node.xattrs[attr] = data
+	return nil
+}
+func (m *memFS) GetXattr(path string, attr string) ([]byte, error) {
+	node, err := m.getNode(path)
+	if err != nil {
+		return nil, os.ErrNotExist
+	}
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	data, ok := node.xattrs[attr]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return data, nil
+}
+
+func (m *memFS) RemoveXattr(path string, attr string) error {
+	node, err := m.getNode(path)
+	if err != nil {
+		return os.ErrNotExist
+	}
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	// RemoveXattr is meant to ensure it does not exist; if it does not exist already, that is fine
+	if _, ok := node.xattrs[attr]; !ok {
+		return nil
+	}
+	delete(node.xattrs, attr)
+	return nil
+}
+func (m *memFS) ListXattrs(path string) (map[string][]byte, error) {
+	node, err := m.getNode(path)
+	if err != nil {
+		return nil, os.ErrNotExist
+	}
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	// do not return the original, as someone might change it by accident.
+	// Return a copy
+	ret := make(map[string][]byte)
+	for k, v := range node.xattrs {
+		dst := make([]byte, len(v))
+		copy(dst, v)
+		ret[k] = dst
+	}
+	return ret, nil
 }
 
 type memFile struct {
@@ -545,6 +607,7 @@ type node struct {
 	major, minor uint32
 	children     map[string]*node
 	mu           sync.Mutex
+	xattrs       map[string][]byte
 }
 
 func (n *node) fileInfo(name string) fs.FileInfo {
