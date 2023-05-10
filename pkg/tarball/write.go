@@ -31,6 +31,8 @@ import (
 	"github.com/chainguard-dev/go-apk/pkg/passwd"
 )
 
+const xattrTarPAXRecordsPrefix = "SCHILY.xattr."
+
 func hasHardlinks(fi fs.FileInfo) bool {
 	if stat := fi.Sys(); stat != nil {
 		si, ok := stat.(*syscall.Stat_t)
@@ -198,9 +200,10 @@ func (ctx *Context) writeTar(tw *tar.Writer, fsys fs.FS, users, groups map[int]s
 			}
 		}
 
-		if ctx.UseChecksums {
+		if header.PAXRecords == nil {
 			header.PAXRecords = map[string]string{}
-
+		}
+		if ctx.UseChecksums {
 			if link != "" {
 				linkDigest := sha1.Sum([]byte(link)) //nolint:gosec
 				linkChecksum := hex.EncodeToString(linkDigest[:])
@@ -219,6 +222,17 @@ func (ctx *Context) writeTar(tw *tar.Writer, fsys fs.FS, users, groups map[int]s
 
 				fileChecksum := hex.EncodeToString(fileDigest.Sum(nil))
 				header.PAXRecords["APK-TOOLS.checksum.SHA1"] = fileChecksum
+			}
+		}
+
+		xfs, ok := fsys.(apkfs.XattrFS)
+		if ok {
+			xattrs, err := xfs.ListXattrs(path)
+			// we can ignore errors
+			if err == nil && xattrs != nil {
+				for name, value := range xattrs {
+					header.PAXRecords[xattrTarPAXRecordsPrefix+name] = string(value)
+				}
 			}
 		}
 

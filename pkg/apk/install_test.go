@@ -18,6 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -32,6 +33,7 @@ type testDirEntry struct {
 	perms   os.FileMode
 	dir     bool
 	content []byte
+	xattrs  map[string][]byte
 }
 
 func TestInstallAPKFiles(t *testing.T) {
@@ -42,15 +44,15 @@ func TestInstallAPKFiles(t *testing.T) {
 		// create a tgz stream with our files
 		entries := []testDirEntry{
 			// do the dirs first so we are assured they go in before files
-			{"etc", 0o755, true, nil},
-			{"etc/foo", 0o755, true, nil},
-			{"var", 0o755, true, nil},
-			{"var/lib", 0o755, true, nil},
-			{"var/lib/test", 0o755, true, nil},
+			{"etc", 0o755, true, nil, nil},
+			{"etc/foo", 0o755, true, nil, nil},
+			{"var", 0o755, true, nil, nil},
+			{"var/lib", 0o755, true, nil, nil},
+			{"var/lib/test", 0o755, true, nil, nil},
 
-			{"etc/foo/bar", 0644, false, []byte("hello world")},
-			{"var/lib/test/foobar", 0644, false, []byte("hello var/lib")},
-			{"etc/other", 0644, false, []byte("first")},
+			{"etc/foo/bar", 0644, false, []byte("hello world"), nil},
+			{"var/lib/test/foobar", 0644, false, []byte("hello var/lib"), nil},
+			{"etc/other", 0644, false, []byte("first"), nil},
 		}
 
 		r := testCreateTGZForPackage(entries)
@@ -70,7 +72,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			if e.dir {
 				require.True(t, ok, "directory %s not found in headers", name)
 				require.Equal(t, tar.TypeDir, rune(h.Typeflag), "mismatched file type for %s", name)
-				require.Equal(t, int64(os.ModeDir|e.perms), h.Mode, "mismatched permissions for %s", name)
+				require.Equal(t, int64(e.perms), h.Mode, "mismatched permissions for %s", name)
 			} else {
 				require.True(t, ok, "file %s not found in headers", name)
 				require.Equal(t, tar.TypeReg, rune(h.Typeflag), "mismatched file type for %s", name)
@@ -98,6 +100,52 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("xattrs", func(t *testing.T) {
+		apk, src, err := testGetTestAPK()
+		require.NoErrorf(t, err, "failed to get test APK")
+
+		// create a tgz stream with our files
+		entries := []testDirEntry{
+			// do the dirs first so we are assured they go in before files
+			{"etc", 0o755, true, nil, map[string][]byte{"user.etc": []byte("hello world")}},
+			{"etc/foo", 0o644, false, []byte("hello world"), map[string][]byte{"user.file": []byte("goodbye now")}},
+		}
+
+		r := testCreateTGZForPackage(entries)
+		headers, err := apk.installAPKFiles(r, "", "")
+		require.NoError(t, err)
+
+		require.Equal(t, len(headers), len(entries))
+
+		// compare each one to make sure it is in the returned list
+		headerMap := map[string]tar.Header{}
+		for _, h := range headers {
+			headerMap[h.Name] = h
+		}
+		for _, e := range entries {
+			name := e.path
+			h, ok := headerMap[name]
+			require.True(t, ok, "target %s not found in headers", name)
+			for k, v := range e.xattrs {
+				val, ok := h.PAXRecords[fmt.Sprintf("%s%s", xattrTarPAXRecordsPrefix, k)]
+				require.True(t, ok, "xattr %s not found in headers for %s", k, name)
+				require.Equal(t, val, string(v), "mismatched xattr %s for %s", k, name)
+			}
+		}
+
+		// compare each one in the memfs filesystem to make sure it was installed correctly
+		for _, e := range entries {
+			name := e.path
+			xattrs, err := src.ListXattrs(name)
+			require.NoError(t, err, "error getting xattrs %s", name)
+			require.Equal(t, len(xattrs), len(e.xattrs), "mismatched number of xattrs for %s", name)
+			for k, v := range e.xattrs {
+				require.Equal(t, v, xattrs[k], "mismatched xattr %s for %s", k, name)
+			}
+		}
+	})
+
 	t.Run("overlapping files", func(t *testing.T) {
 		t.Run("different origin and content", func(t *testing.T) {
 			apk, src, err := testGetTestAPK()
@@ -110,8 +158,8 @@ func TestInstallAPKFiles(t *testing.T) {
 			pkg := &repository.Package{Name: "first", Origin: "first"}
 
 			entries := []testDirEntry{
-				{"etc", 0o755, true, nil},
-				{overwriteFilename, 0o755, false, originalContent},
+				{"etc", 0o755, true, nil, nil},
+				{overwriteFilename, 0o755, false, originalContent, nil},
 			}
 
 			r := testCreateTGZForPackage(entries)
@@ -125,7 +173,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.Equal(t, originalContent, actual)
 
 			entries = []testDirEntry{
-				{overwriteFilename, 0o755, false, finalContent},
+				{overwriteFilename, 0o755, false, finalContent, nil},
 			}
 
 			r = testCreateTGZForPackage(entries)
@@ -147,8 +195,8 @@ func TestInstallAPKFiles(t *testing.T) {
 			pkg := &repository.Package{Name: "first", Origin: "first"}
 
 			entries := []testDirEntry{
-				{"etc", 0755, true, nil},
-				{overwriteFilename, 0755, false, originalContent},
+				{"etc", 0755, true, nil, nil},
+				{overwriteFilename, 0755, false, originalContent, nil},
 			}
 
 			r := testCreateTGZForPackage(entries)
@@ -162,7 +210,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.Equal(t, originalContent, actual)
 
 			entries = []testDirEntry{
-				{overwriteFilename, 0755, false, finalContent},
+				{overwriteFilename, 0755, false, finalContent, nil},
 			}
 
 			r = testCreateTGZForPackage(entries)
@@ -182,8 +230,8 @@ func TestInstallAPKFiles(t *testing.T) {
 			overwriteFilename := "etc/doublewrite"
 
 			entries := []testDirEntry{
-				{"etc", 0o755, true, nil},
-				{overwriteFilename, 0o755, false, originalContent},
+				{"etc", 0o755, true, nil, nil},
+				{overwriteFilename, 0o755, false, originalContent, nil},
 			}
 			pkg := &repository.Package{Name: "first", Origin: "first"}
 
@@ -198,7 +246,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.Equal(t, originalContent, actual)
 
 			entries = []testDirEntry{
-				{overwriteFilename, 0o755, false, finalContent},
+				{overwriteFilename, 0o755, false, finalContent, nil},
 			}
 
 			r = testCreateTGZForPackage(entries)
@@ -219,8 +267,8 @@ func TestInstallAPKFiles(t *testing.T) {
 			pkg := &repository.Package{Name: "first", Origin: "first"}
 
 			entries := []testDirEntry{
-				{"etc", 0o755, true, nil},
-				{overwriteFilename, 0o755, false, originalContent},
+				{"etc", 0o755, true, nil, nil},
+				{overwriteFilename, 0o755, false, originalContent, nil},
 			}
 
 			r := testCreateTGZForPackage(entries)
@@ -234,7 +282,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.Equal(t, originalContent, actual)
 
 			entries = []testDirEntry{
-				{overwriteFilename, 0o755, false, originalContent},
+				{overwriteFilename, 0o755, false, originalContent, nil},
 			}
 
 			r = testCreateTGZForPackage(entries)
@@ -254,19 +302,37 @@ func testCreateTGZForPackage(entries []testDirEntry) io.Reader {
 	tw := tar.NewWriter(gw)
 
 	for _, e := range entries {
+		var header *tar.Header
 		if e.dir {
-			_ = tw.WriteHeader(&tar.Header{
+			header = &tar.Header{
 				Name:     e.path,
 				Typeflag: tar.TypeDir,
-				Mode:     int64(os.ModeDir | e.perms),
-			})
+				Mode:     int64(e.perms),
+			}
 		} else {
-			_ = tw.WriteHeader(&tar.Header{
+			header = &tar.Header{
 				Name:     e.path,
 				Typeflag: tar.TypeReg,
 				Mode:     int64(e.perms),
 				Size:     int64(len(e.content)),
-			})
+			}
+		}
+
+		if e.xattrs != nil {
+			header.Format = tar.FormatPAX
+			if header.PAXRecords == nil {
+				header.PAXRecords = make(map[string]string)
+			}
+			for k, v := range e.xattrs {
+				header.PAXRecords[fmt.Sprintf("%s%s", xattrTarPAXRecordsPrefix, k)] = string(v)
+			}
+		}
+
+		err := tw.WriteHeader(header)
+		if err != nil {
+			panic(err)
+		}
+		if e.content != nil {
 			_, _ = tw.Write(e.content)
 		}
 	}

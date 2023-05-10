@@ -32,4 +32,6 @@ const (
 
 	// for fetching the alpine keys
 	alpineReleasesURL = "https://alpinelinux.org/releases.json"
+
+	xattrTarPAXRecordsPrefix = "SCHILY.xattr."
 )
