@@ -510,6 +510,21 @@ func (f *dirFS) Mknod(name string, mode uint32, dev int) error {
 	return f.overrides.Mknod(name, mode, dev)
 }
 
+func (f *dirFS) SetXattr(path string, attr string, data []byte) error {
+	// the underlying filesystem might or might not support xattrs
+	// but we have info on every file in memory, so might as well store it there.
+	return f.overrides.SetXattr(path, attr, data)
+}
+func (f *dirFS) GetXattr(path string, attr string) ([]byte, error) {
+	return f.overrides.GetXattr(path, attr)
+}
+func (f *dirFS) RemoveXattr(path string, attr string) error {
+	return f.overrides.RemoveXattr(path, attr)
+}
+func (f *dirFS) ListXattrs(path string) (map[string][]byte, error) {
+	return f.overrides.ListXattrs(path)
+}
+
 // sanitize ensures that we never go beyond the root of the filesystem
 func (f *dirFS) sanitizePath(p string) (v string, err error) {
 	return sanitizePath(f.base, p)

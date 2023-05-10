@@ -275,3 +275,69 @@ func TestMemFSMidLevelSymlink(t *testing.T) {
 		require.Equal(t, truedir, actualTarget, "target of %s should be %s", fullLinkdir, truedir)
 	})
 }
+
+func TestMemFSXattrs(t *testing.T) {
+	t.Run("file not exist", func(t *testing.T) {
+		var (
+			m = NewMemFS()
+		)
+		err := m.SetXattr("/a/b", "user.foo", []byte("hello"))
+		require.Error(t, err, os.ErrNotExist)
+	})
+	t.Run("file exist", func(t *testing.T) {
+		var (
+			m    = NewMemFS()
+			dir  = "/a"
+			file = "/a/b"
+			link = "/a/l"
+		)
+		err := m.Mkdir(dir, 0o755)
+		require.NoError(t, err)
+		err = m.WriteFile(file, []byte("hello"), 0o644)
+		require.NoError(t, err)
+		err = m.Symlink("b", link)
+		require.NoError(t, err)
+
+		xattrsTest := func(t *testing.T, m FullFS, target string) {
+			var (
+				err   error
+				data1 = []byte("hello")
+				data2 = []byte("world")
+				attr1 = "user.foo"
+				attr2 = "user.bar"
+				val   []byte
+			)
+			err = m.SetXattr(target, attr1, data1)
+			require.NoError(t, err)
+			err = m.SetXattr(target, attr2, data2)
+			require.NoError(t, err)
+
+			val, err = m.GetXattr(target, attr1)
+			require.NoError(t, err)
+			require.Equal(t, data1, val)
+
+			val, err = m.GetXattr(target, attr2)
+			require.NoError(t, err)
+			require.Equal(t, data2, val)
+
+			vals, err := m.ListXattrs(target)
+			require.NoError(t, err)
+			require.Len(t, vals, 2)
+			require.Contains(t, vals, attr1)
+			require.Contains(t, vals, attr2)
+			require.Equal(t, data1, vals[attr1])
+			require.Equal(t, data2, vals[attr2])
+		}
+
+		t.Run("on directory", func(t *testing.T) {
+			xattrsTest(t, m, dir)
+		})
+		t.Run("on file", func(t *testing.T) {
+			xattrsTest(t, m, file)
+		})
+
+		t.Run("on symlink", func(t *testing.T) {
+			xattrsTest(t, m, link)
+		})
+	})
+}

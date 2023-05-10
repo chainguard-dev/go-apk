@@ -39,6 +39,10 @@ type FullFS interface {
 	Remove(name string) error
 	Chmod(path string, perm fs.FileMode) error
 	Chown(path string, uid int, gid int) error
+	SetXattr(path string, attr string, data []byte) error
+	GetXattr(path string, attr string) ([]byte, error)
+	RemoveXattr(path string, attr string) error
+	ListXattrs(path string) (map[string][]byte, error)
 }
 
 // File is an interface for a file. It includes Read, Write, Close.
