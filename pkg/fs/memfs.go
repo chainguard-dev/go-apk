@@ -164,7 +164,6 @@ func (m *memFS) MkdirAll(path string, perm fs.FileMode) error {
 		}
 		var ok bool
 		anode.mu.Lock()
-		defer anode.mu.Unlock()
 		newnode, ok := anode.children[part]
 		if !ok {
 			newnode = &node{
@@ -178,6 +177,7 @@ func (m *memFS) MkdirAll(path string, perm fs.FileMode) error {
 			}
 			anode.children[part] = newnode
 		}
+		anode.mu.Unlock()
 		// what if it is a symlink?
 		if newnode.mode&os.ModeSymlink != 0 {
 			linkTarget := newnode.linkTarget
