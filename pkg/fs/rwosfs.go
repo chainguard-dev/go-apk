@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -396,6 +397,11 @@ func (f *dirFS) ReadDir(name string) ([]fs.DirEntry, error) {
 		}
 		dirEntries = append(dirEntries, &dirEntry{disk: f, mem: m})
 	}
+	// we need them in a consistent order
+	sort.Slice(dirEntries, func(i, j int) bool {
+		return dirEntries[i].Name() < dirEntries[j].Name()
+	})
+
 	return dirEntries, nil
 }
 func (f *dirFS) ReadFile(name string) ([]byte, error) {

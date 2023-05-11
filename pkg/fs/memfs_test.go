@@ -1,12 +1,20 @@
 package fs
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+type testDirEntry struct {
+	path    string
+	perms   os.FileMode
+	dir     bool
+	content []byte
+}
 
 func TestMemFSMkdir(t *testing.T) {
 	t.Run("parent non existent", func(t *testing.T) {
@@ -340,4 +348,61 @@ func TestMemFSXattrs(t *testing.T) {
 			xattrsTest(t, m, link)
 		})
 	})
+}
+
+func TestMemFSConsistentOrdering(t *testing.T) {
+	var (
+		m = NewMemFS()
+	)
+	entries := []testDirEntry{
+		{"dir1", 0o777, true, nil},
+		{"dir1/subdir1", 0o777, true, nil},
+		{"dir1/subdir1/file1", 0o644, false, nil},
+		{"dir1/subdir1/file2", 0o644, false, nil},
+		{"dir1/subdir2", 0o777, true, nil},
+		{"dir1/subdir2/file1", 0o644, false, nil},
+		{"dir1/subdir2/file2", 0o644, false, nil},
+		{"dir1/subdir3", 0o777, true, nil},
+		{"dir1/subdir3/file1", 0o644, false, nil},
+		{"dir1/subdir3/file2", 0o644, false, nil},
+		{"dir2", 0o777, true, nil},
+		{"dir2/subdir1", 0o777, true, nil},
+		{"dir2/subdir1/file1", 0o644, false, nil},
+		{"dir2/subdir1/file2", 0o644, false, nil},
+		{"dir2/subdir2", 0o777, true, nil},
+		{"dir2/subdir2/file1", 0o644, false, nil},
+		{"dir2/subdir2/file2", 0o644, false, nil},
+		{"dir2/subdir3", 0o777, true, nil},
+		{"dir2/subdir3/file1", 0o644, false, nil},
+		{"dir2/subdir3/file2", 0o644, false, nil},
+		{"dir2/file1", 0o644, false, nil},
+		{"dir2/file2", 0o644, false, nil},
+		{"dir2/file3", 0o644, false, nil},
+	}
+	for _, e := range entries {
+		var err error
+		if e.dir {
+			err = m.Mkdir(e.path, e.perms)
+		} else {
+			err = m.WriteFile(e.path, e.content, e.perms)
+		}
+		require.NoError(t, err)
+	}
+	// now walk the tree, we should get consistent results each time
+	var results []string
+	for i := 0; i < 10; i++ {
+		var result []string
+		err := fs.WalkDir(m, "/", func(path string, d fs.DirEntry, err error) error {
+			require.NoError(t, err)
+			result = append(result, path)
+			return nil
+		})
+		require.NoError(t, err)
+		if i == 0 {
+			results = result
+			continue
+		}
+		require.Equal(t, results, result, "iteration %d", i)
+	}
+	// all results should be the same
 }

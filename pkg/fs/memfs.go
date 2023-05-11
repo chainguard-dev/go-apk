@@ -23,6 +23,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -288,6 +289,10 @@ func (m *memFS) ReadDir(name string) ([]fs.DirEntry, error) {
 	for name, node := range anode.children {
 		de = append(de, fs.FileInfoToDirEntry(node.fileInfo(name)))
 	}
+	// we need them in a consistent order, so sort them by filename, which is what os.ReadDir() does
+	sort.Slice(de, func(i, j int) bool {
+		return de[i].Name() < de[j].Name()
+	})
 	return de, nil
 }
 
