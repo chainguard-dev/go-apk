@@ -350,6 +350,19 @@ func TestMemFSXattrs(t *testing.T) {
 	})
 }
 
+func TestMemFSSymlinkLoop(t *testing.T) {
+	var (
+		m   = NewMemFS()
+		err error
+	)
+	err = m.MkdirAll("/a/b/c", 0o755)
+	require.NoError(t, err)
+	err = m.Symlink("/a/b", "/a/link")
+	require.NoError(t, err)
+	err = m.MkdirAll("/a/link/q/c", 0o755)
+	require.NoError(t, err)
+}
+
 func TestMemFSConsistentOrdering(t *testing.T) {
 	var (
 		m = NewMemFS()
