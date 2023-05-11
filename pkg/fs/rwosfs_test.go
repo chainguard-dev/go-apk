@@ -15,6 +15,7 @@
 package fs
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -136,4 +137,61 @@ func TestCaseInsensitive(t *testing.T) {
 			require.Equal(t, string(f.content), string(content), "content of %s should be %s", f.path, f.content)
 		}
 	}
+}
+
+func TestDirFSConsistentOrdering(t *testing.T) {
+	dir := t.TempDir()
+	// force underlying filesystem to be treated as case insensitive
+	fsys := DirFS(dir)
+	entries := []testDirEntry{
+		{"dir1", 0o777, true, nil},
+		{"dir1/subdir1", 0o777, true, nil},
+		{"dir1/subdir1/file1", 0o644, false, nil},
+		{"dir1/subdir1/file2", 0o644, false, nil},
+		{"dir1/subdir2", 0o777, true, nil},
+		{"dir1/subdir2/file1", 0o644, false, nil},
+		{"dir1/subdir2/file2", 0o644, false, nil},
+		{"dir1/subdir3", 0o777, true, nil},
+		{"dir1/subdir3/file1", 0o644, false, nil},
+		{"dir1/subdir3/file2", 0o644, false, nil},
+		{"dir2", 0o777, true, nil},
+		{"dir2/subdir1", 0o777, true, nil},
+		{"dir2/subdir1/file1", 0o644, false, nil},
+		{"dir2/subdir1/file2", 0o644, false, nil},
+		{"dir2/subdir2", 0o777, true, nil},
+		{"dir2/subdir2/file1", 0o644, false, nil},
+		{"dir2/subdir2/file2", 0o644, false, nil},
+		{"dir2/subdir3", 0o777, true, nil},
+		{"dir2/subdir3/file1", 0o644, false, nil},
+		{"dir2/subdir3/file2", 0o644, false, nil},
+		{"dir2/file1", 0o644, false, nil},
+		{"dir2/file2", 0o644, false, nil},
+		{"dir2/file3", 0o644, false, nil},
+	}
+	for _, e := range entries {
+		var err error
+		if e.dir {
+			err = fsys.Mkdir(e.path, e.perms)
+		} else {
+			err = fsys.WriteFile(e.path, e.content, e.perms)
+		}
+		require.NoError(t, err)
+	}
+	// now walk the tree, we should get consistent results each time
+	var results []string
+	for i := 0; i < 10; i++ {
+		var result []string
+		err := fs.WalkDir(fsys, "/", func(path string, d fs.DirEntry, err error) error {
+			require.NoError(t, err)
+			result = append(result, path)
+			return nil
+		})
+		require.NoError(t, err)
+		if i == 0 {
+			results = result
+			continue
+		}
+		require.Equal(t, results, result, "iteration %d", i)
+	}
+	// all results should be the same
 }
