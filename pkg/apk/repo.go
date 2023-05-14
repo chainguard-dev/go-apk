@@ -344,7 +344,7 @@ func (p *PkgResolver) ResolvePackage(pkgName string) (pkgs []*repository.Reposit
 		// get the one that most matches what was requested
 		packages = filterPackages(pkgsWithVersions, withVersion(version, compare), withPreferPin(pin))
 		if len(packages) == 0 {
-			return nil, fmt.Errorf("could not find package %s in indexes: %w", pkgName, err)
+			return nil, fmt.Errorf("could not find package %s in indexes", pkgName)
 		}
 		sortPackages(packages, nil, name, nil, pin)
 	} else {
