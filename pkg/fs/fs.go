@@ -79,3 +79,11 @@ type OpenReaderAtReadLinkReadnodFS interface {
 	ReadLinkFS
 	ReadnodFS
 }
+
+type XattrFS interface {
+	fs.FS
+	SetXattr(path string, attr string, data []byte) error
+	GetXattr(path string, attr string) ([]byte, error)
+	RemoveXattr(path string, attr string) error
+	ListXattrs(path string) (map[string][]byte, error)
+}

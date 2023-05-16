@@ -113,6 +113,17 @@ func (a *APK) installAPKFiles(gzipIn io.Reader, origin, replaces string) ([]tar.
 			if err := a.fs.MkdirAll(header.Name, header.FileInfo().Mode().Perm()); err != nil {
 				return nil, fmt.Errorf("error creating directory %s: %w", header.Name, err)
 			}
+			// xattrs
+			for k, v := range header.PAXRecords {
+				if !strings.HasPrefix(k, xattrTarPAXRecordsPrefix) {
+					continue
+				}
+				attrName := strings.TrimPrefix(k, xattrTarPAXRecordsPrefix)
+				if err := a.fs.SetXattr(header.Name, attrName, []byte(v)); err != nil {
+					return nil, fmt.Errorf("error setting xattr %s on %s: %w", attrName, header.Name, err)
+				}
+			}
+
 		case tar.TypeReg:
 			// we need to calculate the checksum of the file, and then pass it to the writeOneFile,
 			// so we save it to a tempdir and then remove it
@@ -209,6 +220,18 @@ func (a *APK) installAPKFiles(gzipIn io.Reader, origin, replaces string) ([]tar.
 		default:
 			return nil, fmt.Errorf("unsupported file type %s %v", header.Name, header.Typeflag)
 		}
+
+		// xattrs
+		for k, v := range header.PAXRecords {
+			if !strings.HasPrefix(k, "SCHILY.xattr.") {
+				continue
+			}
+			attrName := strings.TrimPrefix(k, "SCHILY.xattr.")
+			if err := a.fs.SetXattr(header.Name, attrName, []byte(v)); err != nil {
+				return nil, fmt.Errorf("error setting xattr %s on %s: %w", attrName, header.Name, err)
+			}
+		}
+
 		files = append(files, *header)
 	}
 
