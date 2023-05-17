@@ -37,7 +37,7 @@ import (
 // The signatures for each index are verified unless ignoreSignatures is set to true.
 // The key-value pairs in the map for `keys` are the name of the key and the contents of the key.
 // The name is just indicative. If it finds a match, it will use it. Else, it will try all keys.
-func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, options ...IndexOption) (indexes []NamedIndex, err error) {
+func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, options ...IndexOption) (indexes []NamedIndex, err error) { //nolint:gocyclo
 	opts := &indexOpts{}
 	for _, opt := range options {
 		opt(opts)
@@ -97,6 +97,14 @@ func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, o
 			res, err := client.Get(asURL.String())
 			if err != nil {
 				return nil, fmt.Errorf("unable to get repository index at %s: %w", u, err)
+			}
+			switch res.StatusCode {
+			case http.StatusOK:
+				// this is fine
+			case http.StatusNotFound:
+				return nil, fmt.Errorf("repository index not found for architecture %s at %s", arch, u)
+			default:
+				return nil, fmt.Errorf("unexpected status code %d when getting repository index for architecture %s at %s", res.StatusCode, arch, u)
 			}
 			defer res.Body.Close()
 			buf := bytes.NewBuffer(nil)
