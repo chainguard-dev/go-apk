@@ -223,10 +223,10 @@ func (a *APK) installAPKFiles(gzipIn io.Reader, origin, replaces string) ([]tar.
 
 		// xattrs
 		for k, v := range header.PAXRecords {
-			if !strings.HasPrefix(k, "SCHILY.xattr.") {
+			if !strings.HasPrefix(k, xattrTarPAXRecordsPrefix) {
 				continue
 			}
-			attrName := strings.TrimPrefix(k, "SCHILY.xattr.")
+			attrName := strings.TrimPrefix(k, xattrTarPAXRecordsPrefix)
 			if err := a.fs.SetXattr(header.Name, attrName, []byte(v)); err != nil {
 				return nil, fmt.Errorf("error setting xattr %s on %s: %w", attrName, header.Name, err)
 			}
