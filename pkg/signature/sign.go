@@ -18,6 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha1" //nolint:gosec
 	"errors"
 	"fmt"
@@ -75,7 +76,7 @@ func SignIndex(logger logger.Logger, signingKey string, indexFile string) error 
 	logger.Printf("writing signed index to %s", indexFile)
 
 	var sigBuffer bytes.Buffer
-	if err := multitarctx.WriteArchive(&sigBuffer, sigFS); err != nil {
+	if err := multitarctx.WriteTargz(context.TODO(), &sigBuffer, sigFS); err != nil {
 		return fmt.Errorf("unable to write signature tarball: %w", err)
 	}
 

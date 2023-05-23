@@ -3,6 +3,7 @@ package tarball
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/chainguard-dev/go-apk/pkg/fs"
@@ -28,7 +29,7 @@ func TestWriteTar(t *testing.T) {
 	require.NoError(t, err, "error setting xattr on %s", file)
 	ctx := Context{}
 	tw := tar.NewWriter(&buf)
-	err = ctx.writeTar(tw, m, nil, nil)
+	err = ctx.writeTar(context.Background(), tw, m, nil, nil)
 	require.NoError(t, err, "error writing tar")
 	err = tw.Close()
 	require.NoError(t, err, "error closing tar writer")
