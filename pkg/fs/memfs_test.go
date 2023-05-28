@@ -363,6 +363,37 @@ func TestMemFSSymlinkLoop(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestMemFSSymlinkCycle(t *testing.T) {
+	var (
+		m   = NewMemFS()
+		err error
+	)
+	err = m.MkdirAll("/a", 0o755)
+	require.NoError(t, err)
+	err = m.Symlink("b", "/a/b")
+	require.NoError(t, err)
+
+	// should be able to read the link, even if a cycle
+	target, err := m.Readlink("/a/b")
+	require.NoError(t, err)
+	require.Equal(t, "b", target)
+
+	// but if we try to go into it, we should not get an infinite loop
+	_, err = m.ReadDir("/a/b")
+	require.Error(t, err)
+
+	// same for treatung it as a file
+	_, err = m.ReadFile("/a/b")
+	require.Error(t, err)
+
+	// same for Mkdir and MkdirAll
+	err = m.Mkdir("/a/b/c", 0o755)
+	require.Error(t, err)
+
+	err = m.MkdirAll("/a/b/c/d", 0o755)
+	require.Error(t, err)
+}
+
 func TestMemFSConsistentOrdering(t *testing.T) {
 	var (
 		m = NewMemFS()

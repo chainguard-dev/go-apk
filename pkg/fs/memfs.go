@@ -31,7 +31,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const pathSep = "/"
+const (
+	pathSep = "/"
+	// maxLinks maximum permitted depths of symlinks, to prevent infinite recursion
+	// matches what Linux kernel does from 4.2 onwards, see https://man7.org/linux/man-pages/man7/path_resolution.7.html
+	maxLinks = 40
+)
 
 type memFS struct {
 	tree *node
@@ -52,6 +57,9 @@ func NewMemFS() FullFS {
 // getNode returns the node for the given path. If the path is not found, it
 // returns an error.
 func (m *memFS) getNode(path string) (*node, error) {
+	return m.getNodeCountLinks(path, 0)
+}
+func (m *memFS) getNodeCountLinks(path string, linkDepth int) (*node, error) {
 	if path == "/" || path == "." {
 		return m.tree, nil
 	}
@@ -76,6 +84,10 @@ func (m *memFS) getNode(path string) (*node, error) {
 		}
 		// what if it is a symlink?
 		if childNode.mode&os.ModeSymlink != 0 {
+			newDepth := linkDepth + 1
+			if newDepth > maxLinks {
+				return nil, fmt.Errorf("maximum symlink depth exceeded")
+			}
 			// getNode requires working on the absolute path, so we just resolve the path to an absolute path,
 			// rather than struggling to clean up the path.
 			// But, we have to make sure that we set it relative to where we are currently, rather than the parent of the path.
@@ -88,7 +100,7 @@ func (m *memFS) getNode(path string) (*node, error) {
 			// but that absolute path can cause us to try and hit something that is already locked
 			// and since we are recursing, it will not get freed until we return
 			// leading to a deadlock race condition
-			targetNode, err := m.getNode(linkTarget)
+			targetNode, err := m.getNodeCountLinks(linkTarget, newDepth)
 			if err != nil {
 				return nil, err
 			}
@@ -205,6 +217,9 @@ func (m *memFS) Open(name string) (fs.File, error) {
 }
 
 func (m *memFS) OpenFile(name string, flag int, perm fs.FileMode) (File, error) {
+	return m.openFile(name, flag, perm, 0)
+}
+func (m *memFS) openFile(name string, flag int, perm fs.FileMode, linkCount int) (File, error) {
 	parent := filepath.Dir(name)
 	base := filepath.Base(name)
 	parentAnode, err := m.getNode(parent)
@@ -242,11 +257,15 @@ func (m *memFS) OpenFile(name string, flag int, perm fs.FileMode) (File, error) 
 	parentAnode.mu.Unlock()
 	// what if it is a symlink? Follow the symlink
 	if anode.mode&os.ModeSymlink != 0 {
+		localCount := linkCount + 1
+		if localCount > maxLinks {
+			return nil, fmt.Errorf("too many links")
+		}
 		linkTarget := anode.linkTarget
 		if !filepath.IsAbs(linkTarget) {
 			linkTarget = filepath.Join(parent, linkTarget)
 		}
-		return m.OpenFile(linkTarget, flag, perm)
+		return m.openFile(linkTarget, flag, perm, localCount)
 	}
 
 	return newMemFile(anode, name, m, flag), nil
