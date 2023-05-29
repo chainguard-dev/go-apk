@@ -33,6 +33,11 @@ import (
 	"go.lsp.dev/uri"
 )
 
+// IndexURL full URL to the index file for the given repo and arch
+func IndexURL(repo, arch string) string {
+	return fmt.Sprintf("%s/%s/%s", repo, arch, indexFilename)
+}
+
 // GetRepositoryIndexes returns the indexes for the named repositories, keys and archs.
 // The signatures for each index are verified unless ignoreSignatures is set to true.
 // The key-value pairs in the map for `keys` are the name of the key and the contents of the key.
@@ -61,7 +66,7 @@ func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, o
 		}
 
 		repoBase := fmt.Sprintf("%s/%s", repoURL, arch)
-		u := fmt.Sprintf("%s/%s", repoBase, indexFilename)
+		u := IndexURL(repoURL, arch)
 
 		// Normalize the repo as a URI, so that local paths
 		// are translated into file:// URLs, allowing them to be parsed
