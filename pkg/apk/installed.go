@@ -214,7 +214,7 @@ func (a *APK) updateTriggers(pkg *repository.Package, controlTarGz io.Reader) er
 			if key != "triggers" {
 				continue
 			}
-			if _, err := triggers.Write([]byte(fmt.Sprintf("%s %s", base64.StdEncoding.EncodeToString(pkg.Checksum), value))); err != nil {
+			if _, err := triggers.Write([]byte(fmt.Sprintf("%s %s\n", base64.StdEncoding.EncodeToString(pkg.Checksum), value))); err != nil {
 				return fmt.Errorf("unable to write triggers file %s: %w", triggersFilePath, err)
 			}
 			break
