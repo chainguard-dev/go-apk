@@ -76,6 +76,10 @@ type repositoryPackage struct {
 func (a *APK) SetRepositories(repos []string) error {
 	a.logger.Infof("setting apk repositories")
 
+	if len(repos) == 0 {
+		return fmt.Errorf("must provide at least one repository")
+	}
+
 	data := strings.Join(repos, "\n") + "\n"
 
 	// #nosec G306 -- apk repositories must be publicly readable
