@@ -116,6 +116,20 @@ func TestSetRepositories(t *testing.T) {
 	require.Equal(t, expected, string(actual), "unexpected content for etc/apk/repositories:\nexpected %s\nactual %s", expected, actual)
 }
 
+func TestSetRepositories_Empty(t *testing.T) {
+	src := apkfs.NewMemFS()
+	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+	require.NoError(t, err)
+	// for initialization
+
+	err = src.MkdirAll("etc/apk", 0o755)
+	require.NoError(t, err)
+
+	repos := []string{}
+	err = apk.SetRepositories(repos)
+	require.Error(t, err)
+}
+
 func TestInitKeyring(t *testing.T) {
 	src := apkfs.NewMemFS()
 	a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
