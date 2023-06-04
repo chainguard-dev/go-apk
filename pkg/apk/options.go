@@ -16,6 +16,7 @@ package apk
 
 import (
 	"io"
+	"os"
 	"runtime"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
@@ -30,6 +31,7 @@ type opts struct {
 	ignoreMknodErrors bool
 	fs                apkfs.FullFS
 	version           string
+	cache             *cache
 }
 
 type Option func(*opts) error
@@ -79,6 +81,22 @@ func WithIgnoreMknodErrors(ignore bool) Option {
 func WithFS(fs apkfs.FullFS) Option {
 	return func(o *opts) error {
 		o.fs = fs
+		return nil
+	}
+}
+
+// WithCache sets to use a cache directory for downloaded apk files and APKINDEX files.
+// If not provided, will not cache.
+func WithCache(cacheDir string) Option {
+	return func(o *opts) error {
+		var err error
+		if cacheDir == "" {
+			cacheDir, err = os.UserCacheDir()
+			if err != nil {
+				return err
+			}
+		}
+		o.cache = &cache{dir: cacheDir}
 		return nil
 	}
 }

@@ -70,3 +70,16 @@ you provide overrides for timestamps, UID/GID, and other features.
 implementation of the functionality of the
 [Alpine Package Keeper](https://wiki.alpinelinux.org/wiki/Alpine_Package_Keeper)
 with regards to reading repositories, installing packages, and managing a local install.
+
+## Caching
+
+This package provides an option to cache apk packages locally. This can provide dramatic speedups
+when installing packages, especially when the package is large or the network is slow and you already have a copy.
+
+It is enabled only when the [WithCache()](./pkg/apk/options.go) option is provided to the `New()` function.
+
+When the cache is enabled, any requested apk files are checked in the cache first, and only downloaded
+in the case of a cache miss. The now-cached apk can be used in subsequent calls. To ignore the cache,
+simple do not pass `WithCache()` to `New()`.
+
+See [CACHE.md](./docs/CACHE.md) for more details on the cache structure.

@@ -46,6 +46,8 @@ type APK struct {
 	executor          Executor
 	ignoreMknodErrors bool
 	client            *http.Client
+	cache             *cache
+	ignoreSignatures  bool
 }
 
 func New(options ...Option) (*APK, error) {
@@ -62,6 +64,7 @@ func New(options ...Option) (*APK, error) {
 		executor:          opt.executor,
 		ignoreMknodErrors: opt.ignoreMknodErrors,
 		version:           opt.version,
+		cache:             opt.cache,
 	}, nil
 }
 
@@ -396,7 +399,7 @@ func (a *APK) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflic
 
 	// to fix the world, we need to:
 	// 1. Get the apkIndexes for each repository for the target arch
-	indexes, err := a.getRepositoryIndexes(false)
+	indexes, err := a.getRepositoryIndexes(a.ignoreSignatures)
 	if err != nil {
 		return toInstall, conflicts, fmt.Errorf("error getting repository indexes: %w", err)
 	}
@@ -580,6 +583,9 @@ func (a *APK) installPackage(pkg *repository.RepositoryPackage, sourceDateEpoch 
 		client := a.client
 		if client == nil {
 			client = &http.Client{}
+		}
+		if a.cache != nil {
+			client = a.cache.client(client, false)
 		}
 		res, err := client.Get(u)
 		if err != nil {

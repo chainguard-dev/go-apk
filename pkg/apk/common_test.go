@@ -14,6 +14,7 @@
 package apk
 
 import (
+	"bytes"
 	"io"
 	"io/fs"
 	"net/http"
@@ -24,11 +25,19 @@ import (
 )
 
 type testLocalTransport struct {
+	fail         bool
 	root         string
 	basenameOnly bool
+	headers      map[string][]string
 }
 
 func (t *testLocalTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if t.fail {
+		return &http.Response{
+			StatusCode: 404,
+			Body:       io.NopCloser(bytes.NewBuffer([]byte("not found"))),
+		}, nil
+	}
 	var target string
 	if t.basenameOnly {
 		target = filepath.Join(t.root, filepath.Base(request.URL.Path))
@@ -42,6 +51,7 @@ func (t *testLocalTransport) RoundTrip(request *http.Request) (*http.Response, e
 	return &http.Response{
 		StatusCode: 200,
 		Body:       f,
+		Header:     t.headers,
 	}, nil
 }
 

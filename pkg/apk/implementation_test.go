@@ -18,19 +18,23 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 )
 
-var testDemoKey = `-----BEGIN PUBLIC KEY-----
+const (
+	testDemoKey = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwXEJ8uVwJPODshTkf2BH
 pH5fVVDppOa974+IQJsZDmGd3Ny0dcd+WwYUhNFUW3bAfc3/egaMWCaprfaHn+oS
 4ddbOFgbX8JCHdru/QMAAU0aEWSMybfJGA569c38fNUF/puX6XK/y0lD2SS3YQ/a
@@ -40,6 +44,16 @@ ybI4r1cARcV75OviyhD8CFhAlapLKaYnRFqFxlA515e6h8i8ih/v3MSEW17cCK0b
 QwIDAQAB
 -----END PUBLIC KEY-----
 `
+)
+
+var (
+	testPkg = repository.Package{
+		Name:    "alpine-baselayout",
+		Version: "3.2.0-r23",
+		Arch:    testArch,
+	}
+	testPkgFilename = fmt.Sprintf("%s-%s.apk", testPkg.Name, testPkg.Version)
+)
 
 func TestInitDB(t *testing.T) {
 	src := apkfs.NewMemFS()
@@ -246,4 +260,169 @@ func TestLoadSystemKeyring(t *testing.T) {
 			require.NotContains(t, keyFiles, filepath.Join(targetDir, "README.txt"))
 		})
 	}
+}
+
+func TestInstallPkg(t *testing.T) {
+	// func (a *APK) installPackage(pkg *repository.RepositoryPackage, sourceDateEpoch *time.Time) error {
+	var (
+		now           = time.Now()
+		repo          = repository.Repository{Uri: fmt.Sprintf("%s/%s", testAlpineRepos, testArch)}
+		packages      = []*repository.Package{&testPkg}
+		repoWithIndex = repo.WithIndex(&repository.ApkIndex{
+			Packages: packages,
+		})
+		testEtag = "testetag"
+		pkg      = repository.NewRepositoryPackage(&testPkg, repoWithIndex)
+	)
+	var prepLayout = func(t *testing.T, cache string) *APK {
+		src := apkfs.NewMemFS()
+		err := src.MkdirAll("lib/apk/db", 0o755)
+		require.NoError(t, err, "unable to mkdir /lib/apk/db")
+
+		opts := []Option{WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors)}
+		if cache != "" {
+			opts = append(opts, WithCache(cache))
+		}
+		a, err := New(opts...)
+		require.NoError(t, err, "unable to create APK")
+		err = a.InitDB()
+		require.NoError(t, err)
+
+		// set a client so we use local testdata instead of heading out to the Internet each time
+		return a
+	}
+	t.Run("no cache", func(t *testing.T) {
+		a := prepLayout(t, "")
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+		})
+		err := a.installPackage(pkg, &now)
+		require.NoErrorf(t, err, "unable to install package")
+	})
+	t.Run("cache miss no network", func(t *testing.T) {
+		// we use a transport that always returns a 404 so we know we're not hitting the network
+		// it should fail for a cache hit
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir)
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{fail: true},
+		})
+		err := a.installPackage(pkg, &now)
+		require.Error(t, err, "should fail when no cache and no network")
+	})
+	t.Run("cache miss network should fill cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir)
+		// fill the cache
+		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
+		err := os.MkdirAll(repoDir, 0o755)
+		require.NoError(t, err, "unable to mkdir cache")
+
+		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
+
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+		})
+		err = a.installPackage(pkg, &now)
+		require.NoErrorf(t, err, "unable to install pkg")
+		// check that the package file is in place
+		_, err = os.Stat(cacheApkFile)
+		require.NoError(t, err, "apk file not found in cache")
+		// check that the contents are the same
+		apk1, err := os.ReadFile(cacheApkFile)
+		require.NoError(t, err, "unable to read cache apk file")
+		apk2, err := os.ReadFile(filepath.Join("testdata", testPkgFilename))
+		require.NoError(t, err, "unable to read previous apk file")
+		require.Equal(t, apk1, apk2, "apk files do not match")
+	})
+	t.Run("cache hit no etag", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir)
+		// fill the cache
+		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
+		err := os.MkdirAll(repoDir, 0o755)
+		require.NoError(t, err, "unable to mkdir cache")
+
+		contents, err := os.ReadFile(filepath.Join("testdata", testPkgFilename))
+		require.NoError(t, err, "unable to read apk file")
+		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
+		err = os.WriteFile(cacheApkFile, contents, 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write cache apk file")
+
+		a.SetClient(&http.Client{
+			// use a different root, so we get a different file
+			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
+		})
+		err = a.installPackage(pkg, &now)
+		require.NoErrorf(t, err, "unable to install pkg")
+		// check that the package file is in place
+		_, err = os.Stat(cacheApkFile)
+		require.NoError(t, err, "apk file not found in cache")
+		// check that the contents are the same as the original
+		apk1, err := os.ReadFile(cacheApkFile)
+		require.NoError(t, err, "unable to read cache apk file")
+		require.Equal(t, apk1, contents, "apk files do not match")
+	})
+	t.Run("cache hit etag match", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir)
+		// fill the cache
+		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
+		err := os.MkdirAll(repoDir, 0o755)
+		require.NoError(t, err, "unable to mkdir cache")
+
+		contents, err := os.ReadFile(filepath.Join("testdata", testPkgFilename))
+		require.NoError(t, err, "unable to read apk file")
+		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
+		err = os.WriteFile(cacheApkFile, contents, 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write cache apk file")
+		err = os.WriteFile(cacheApkFile+".etag", []byte(testEtag), 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write etag")
+
+		a.SetClient(&http.Client{
+			// use a different root, so we get a different file
+			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
+		})
+		err = a.installPackage(pkg, &now)
+		require.NoErrorf(t, err, "unable to install pkg")
+		// check that the package file is in place
+		_, err = os.Stat(cacheApkFile)
+		require.NoError(t, err, "apk file not found in cache")
+		// check that the contents are the same as the original
+		apk1, err := os.ReadFile(cacheApkFile)
+		require.NoError(t, err, "unable to read cache apk file")
+		require.Equal(t, apk1, contents, "apk files do not match")
+	})
+	t.Run("cache hit etag miss", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir)
+		// fill the cache
+		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
+		err := os.MkdirAll(repoDir, 0o755)
+		require.NoError(t, err, "unable to mkdir cache")
+
+		contents, err := os.ReadFile(filepath.Join("testdata", testPkgFilename))
+		require.NoError(t, err, "unable to read apk file")
+		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
+		err = os.WriteFile(cacheApkFile, contents, 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write cache apk file")
+		err = os.WriteFile(cacheApkFile+".etag", []byte(testEtag), 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write etag")
+
+		a.SetClient(&http.Client{
+			// use a different root, so we get a different file
+			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
+		})
+		err = a.installPackage(pkg, &now)
+		require.NoErrorf(t, err, "unable to install pkg")
+		// check that the package file is in place
+		_, err = os.Stat(cacheApkFile)
+		require.NoError(t, err, "apk file not found in cache")
+		// check that the contents are the same as the original
+		apk1, err := os.ReadFile(cacheApkFile)
+		require.NoError(t, err, "unable to read cache apk file")
+		apk2, err := os.ReadFile(filepath.Join("testdata/cache", testPkgFilename))
+		require.NoError(t, err, "unable to read testdata apk file")
+		require.Equal(t, apk1, apk2, "apk files do not match")
+	})
 }
