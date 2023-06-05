@@ -17,6 +17,7 @@ package apk
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
@@ -95,6 +96,7 @@ func WithCache(cacheDir string) Option {
 			if err != nil {
 				return err
 			}
+			cacheDir = filepath.Join(cacheDir, "dev.chainguard.go-apk")
 		}
 		o.cache = &cache{dir: cacheDir}
 		return nil
