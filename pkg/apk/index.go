@@ -33,6 +33,8 @@ import (
 	"go.lsp.dev/uri"
 )
 
+var signatureFileRegex = regexp.MustCompile(`^\.SIGN\.RSA\.(.*\.rsa\.pub)$`)
+
 // IndexURL full URL to the index file for the given repo and arch
 func IndexURL(repo, arch string) string {
 	return fmt.Sprintf("%s/%s/%s", repo, arch, indexFilename)
@@ -47,7 +49,6 @@ func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, o
 	for _, opt := range options {
 		opt(opts)
 	}
-	r := regexp.MustCompile(`^\.SIGN\.RSA\.(.*\.rsa\.pub)$`)
 
 	for _, repo := range repos {
 		// does it start with a pin?
@@ -141,7 +142,7 @@ func GetRepositoryIndexes(repos []string, keys map[string][]byte, arch string, o
 			if err != nil {
 				return nil, fmt.Errorf("failed to read signature from repository index: %w", err)
 			}
-			matches := r.FindStringSubmatch(signatureFile.Name)
+			matches := signatureFileRegex.FindStringSubmatch(signatureFile.Name)
 			if len(matches) != 2 {
 				return nil, fmt.Errorf("failed to find key name in signature file name: %s", signatureFile.Name)
 			}

@@ -16,6 +16,9 @@ package apk
 
 import (
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -25,17 +28,10 @@ import (
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 )
 
-func TestGetRepositoryIndexes(t *testing.T) {
-	src := apkfs.NewMemFS()
-	err := src.MkdirAll("etc/apk", 0o755)
-	require.NoError(t, err, "unable to mkdir /etc/apk")
-	err = src.WriteFile(reposFilePath, []byte("https://dl-cdn.alpinelinux.org/alpine/v3.16/main"), 0o644)
-	require.NoErrorf(t, err, "unable to write repositories")
-	err = src.WriteFile(archFilePath, []byte("aarch64\n"), 0o644)
-	require.NoErrorf(t, err, "unable to write arch")
-	err = src.MkdirAll(keysDirPath, 0o755)
-	require.NoError(t, err, "unable to mkdir /etc/apk/keys")
-	err = src.WriteFile("etc/apk/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub", []byte(`
+var (
+	testAlpineRepos = "https://dl-cdn.alpinelinux.org/alpine/v3.16/main"
+	testKeys        = map[string]string{
+		"alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub": `
 -----BEGIN PUBLIC KEY-----
 MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAyduVzi1mWm+lYo2Tqt/0
 XkCIWrDNP1QBMVPrE0/ZlU2bCGSoo2Z9FHQKz/mTyMRlhNqTfhJ5qU3U9XlyGOPJ
@@ -49,9 +45,8 @@ HwsGXBTVcfXg44RLyL8Lk/2dQxDHNHzAUslJXzPxaHBLmt++2COa2EI1iWlvtznk
 Ok9WP8SOAIj+xdqoiHcC4j72BOVVgiITIJNHrbppZCq6qPR+fgXmXa+sDcGh30m6
 9Wpbr28kLMSHiENCWTdsFij+NQTd5S47H7XTROHnalYDuF1RpS+DpQidT5tUimaT
 JZDr++FjKrnnijbyNF8b98UCAwEAAQ==
------END PUBLIC KEY-----`), 0o644)
-	require.NoError(t, err, "unable to write key")
-	err = src.WriteFile("etc/apk/keys/alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub", []byte(`
+-----END PUBLIC KEY-----`,
+		"alpine-devel@lists.alpinelinux.org-6165ee59.rsa.pub": `
 -----BEGIN PUBLIC KEY-----
 MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAutQkua2CAig4VFSJ7v54
 ALyu/J1WB3oni7qwCZD3veURw7HxpNAj9hR+S5N/pNeZgubQvJWyaPuQDm7PTs1+
@@ -65,19 +60,146 @@ Lxy+3ek0cqcI7K68EtrffU8jtUj9LFTUC8dERaIBs7NgQ/LfDbDfGh9g6qVj1hZl
 k9aaIPTm/xsi8v3u+0qaq7KzIBc9s59JOoA8TlpOaYdVgSQhHHLBaahOuAigH+VI
 isbC9vmqsThF2QdDtQt37keuqoda2E6sL7PUvIyVXDRfwX7uMDjlzTxHTymvq2Ck
 htBqojBnThmjJQFgZXocHG8CAwEAAQ==
------END PUBLIC KEY-----`), 0o644)
-	require.NoError(t, err, "unable to write key")
+-----END PUBLIC KEY-----`,
+	}
+	testArch = "aarch64"
+)
 
-	a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
-	require.NoError(t, err, "unable to create APK")
+func TestGetRepositoryIndexes(t *testing.T) {
+	var prepLayout = func(t *testing.T, cache string) *APK {
+		src := apkfs.NewMemFS()
+		err := src.MkdirAll("etc/apk", 0o755)
+		require.NoError(t, err, "unable to mkdir /etc/apk")
+		err = src.WriteFile(reposFilePath, []byte(testAlpineRepos), 0o644)
+		require.NoErrorf(t, err, "unable to write repositories")
+		err = src.WriteFile(archFilePath, []byte(testArch+"\n"), 0o644)
+		require.NoErrorf(t, err, "unable to write arch")
+		err = src.MkdirAll(keysDirPath, 0o755)
+		require.NoError(t, err, "unable to mkdir /etc/apk/keys")
+		for k, v := range testKeys {
+			err = src.WriteFile(filepath.Join("etc/apk/keys/", k), []byte(v), 0o644)
+			require.NoError(t, err, "unable to write key %s", k)
+		}
 
-	// set a client so we use local testdata instead of heading out to the Internet each time
-	a.SetClient(&http.Client{
-		Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+		opts := []Option{WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors)}
+		if cache != "" {
+			opts = append(opts, WithCache(cache))
+		}
+		a, err := New(opts...)
+		require.NoError(t, err, "unable to create APK")
+
+		// set a client so we use local testdata instead of heading out to the Internet each time
+		return a
+	}
+	t.Run("no cache", func(t *testing.T) {
+		a := prepLayout(t, "")
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+		})
+		indexes, err := a.getRepositoryIndexes(false)
+		require.NoErrorf(t, err, "unable to get indexes")
+		require.Greater(t, len(indexes), 0, "no indexes found")
 	})
-	indexes, err := a.getRepositoryIndexes(false)
-	require.NoErrorf(t, err, "unable to get indexes")
-	require.Greater(t, len(indexes), 0, "no indexes found")
+	t.Run("cache miss no network", func(t *testing.T) {
+		// we use a transport that always returns a 404 so we know we're not hitting the network
+		// it should fail for a cache hit
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir)
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{fail: true},
+		})
+		_, err := a.getRepositoryIndexes(false)
+		require.Error(t, err, "should fail when no cache and no network")
+	})
+	t.Run("cache miss network should fill cache", func(t *testing.T) {
+		// we use a transport that can read from the network
+		// it should fail for a cache hit
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir)
+		// fill the cache
+		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
+		indexFile := filepath.Join(repoDir, indexFilename)
+
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+		})
+		indexes, err := a.getRepositoryIndexes(false)
+		require.NoErrorf(t, err, "unable to get indexes")
+		require.Greater(t, len(indexes), 0, "no indexes found")
+		// check that the index file is in place
+		_, err = os.Stat(indexFile)
+		require.NoError(t, err, "index file not found in cache")
+		// check that the contents are the same
+		index1, err := os.ReadFile(indexFile)
+		require.NoError(t, err, "unable to read cache index file")
+		index2, err := os.ReadFile(filepath.Join("testdata", indexFilename))
+		require.NoError(t, err, "unable to read previous index file")
+		require.Equal(t, index1, index2, "index files do not match")
+	})
+	t.Run("cache hit etag match", func(t *testing.T) {
+		// it should succeed for a cache hit
+		tmpDir := t.TempDir()
+		// fill the cache
+		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
+		err := os.MkdirAll(repoDir, 0o755)
+		require.NoError(t, err, "unable to mkdir cache")
+		index, err := os.ReadFile(filepath.Join("testdata", indexFilename))
+		require.NoError(t, err, "unable to read index")
+		cacheIndexFile := filepath.Join(repoDir, indexFilename)
+		err = os.WriteFile(cacheIndexFile, index, 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write index")
+		testEtag := "test-etag"
+		err = os.WriteFile(filepath.Join(repoDir, indexFilename+".etag"), []byte(testEtag), 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write etag")
+		// get our APK struct
+		a := prepLayout(t, tmpDir)
+		a.SetClient(&http.Client{
+			// since the etag is unchanged, our final file should be the same as the original
+			// the one in testdata/cache is different
+			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
+		})
+		indexes, err := a.getRepositoryIndexes(false)
+		require.NoErrorf(t, err, "unable to get indexes")
+		require.Greater(t, len(indexes), 0, "no indexes found")
+		// check that the contents are the same
+		index1, err := os.ReadFile(cacheIndexFile)
+		require.NoError(t, err, "unable to read cache index file")
+		index2, err := os.ReadFile(filepath.Join("testdata", indexFilename))
+		require.NoError(t, err, "unable to read previous index file")
+		require.Equal(t, index1, index2, "index files do not match")
+	})
+	t.Run("cache hit etag miss", func(t *testing.T) {
+		// it should get the new one for a cache hit but etag mismatch
+		tmpDir := t.TempDir()
+		// fill the cache
+		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
+		err := os.MkdirAll(repoDir, 0o755)
+		require.NoError(t, err, "unable to mkdir cache")
+		index, err := os.ReadFile(filepath.Join("testdata", indexFilename))
+		require.NoError(t, err, "unable to read index")
+		cacheIndexFile := filepath.Join(repoDir, indexFilename)
+		err = os.WriteFile(cacheIndexFile, index, 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write index")
+		testEtag := "test-etag"
+		err = os.WriteFile(filepath.Join(repoDir, indexFilename+".etag"), []byte(testEtag), 0o644) //nolint:gosec // we're writing a test file
+		require.NoError(t, err, "unable to write etag")
+		// get our APK struct
+		a := prepLayout(t, tmpDir)
+		a.SetClient(&http.Client{
+			// since the etag is unchanged, our final file should be the same as the original
+			// the one in testdata/cache is different
+			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
+		})
+		indexes, err := a.getRepositoryIndexes(false)
+		require.NoErrorf(t, err, "unable to get indexes")
+		require.Greater(t, len(indexes), 0, "no indexes found")
+		// check that the contents are the same
+		index1, err := os.ReadFile(cacheIndexFile)
+		require.NoError(t, err, "unable to read cache index file")
+		index2, err := os.ReadFile(filepath.Join("testdata/cache", indexFilename))
+		require.NoError(t, err, "unable to read previous index file")
+		require.Equal(t, index1, index2, "index files do not match")
+	})
 }
 
 //nolint:unparam // nothing uses the first arg for now, but we want to keep this around
