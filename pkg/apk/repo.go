@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -143,8 +144,11 @@ func (a *APK) getRepositoryIndexes(ignoreSignatures bool) ([]NamedIndex, error) 
 		keys[d.Name()] = b
 	}
 	httpClient := a.client
+	if httpClient == nil {
+		httpClient = &http.Client{}
+	}
 	if a.cache != nil {
-		httpClient = a.cache.client(a.client, true)
+		httpClient = a.cache.client(httpClient, true)
 	}
 	return GetRepositoryIndexes(repos, keys, arch, WithIgnoreSignatures(ignoreSignatures), WithHTTPClient(httpClient))
 }
