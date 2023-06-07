@@ -33,7 +33,7 @@ import (
 	"github.com/chainguard-dev/go-apk/pkg/tarball"
 )
 
-func SignIndex(logger logger.Logger, signingKey string, indexFile string) error {
+func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, indexFile string) error {
 	is, err := indexIsAlreadySigned(indexFile)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func SignIndex(logger logger.Logger, signingKey string, indexFile string) error 
 	logger.Printf("writing signed index to %s", indexFile)
 
 	var sigBuffer bytes.Buffer
-	if err := multitarctx.WriteTargz(context.TODO(), &sigBuffer, sigFS); err != nil {
+	if err := multitarctx.WriteTargz(ctx, &sigBuffer, sigFS); err != nil {
 		return fmt.Errorf("unable to write signature tarball: %w", err)
 	}
 

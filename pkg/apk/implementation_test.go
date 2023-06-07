@@ -15,6 +15,7 @@
 package apk
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -59,7 +60,7 @@ func TestInitDB(t *testing.T) {
 	src := apkfs.NewMemFS()
 	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
-	err = apk.InitDB()
+	err = apk.InitDB(context.TODO())
 	require.NoError(t, err)
 	// check all of the contents
 	for _, d := range initDirectories {
@@ -165,7 +166,7 @@ func TestInitKeyring(t *testing.T) {
 		Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
 	})
 
-	require.NoError(t, a.InitKeyring(keyfiles, nil))
+	require.NoError(t, a.InitKeyring(context.TODO(), keyfiles, nil))
 	// InitKeyring should have copied the local key and remote key to the right place
 	fi, err := src.ReadDir(DefaultKeyRingPath)
 	// should be no error reading them
@@ -177,13 +178,13 @@ func TestInitKeyring(t *testing.T) {
 	keyfiles = []string{
 		"/liksdjlksdjlksjlksjdl",
 	}
-	require.Error(t, a.InitKeyring(keyfiles, nil))
+	require.Error(t, a.InitKeyring(context.TODO(), keyfiles, nil))
 
 	// Add an invalid url
 	keyfiles = []string{
 		"http://sldkjflskdjflklksdlksdlkjslk.net",
 	}
-	require.Error(t, a.InitKeyring(keyfiles, nil))
+	require.Error(t, a.InitKeyring(context.TODO(), keyfiles, nil))
 }
 
 func TestLoadSystemKeyring(t *testing.T) {
@@ -285,7 +286,7 @@ func TestInstallPkg(t *testing.T) {
 		}
 		a, err := New(opts...)
 		require.NoError(t, err, "unable to create APK")
-		err = a.InitDB()
+		err = a.InitDB(context.TODO())
 		require.NoError(t, err)
 
 		// set a client so we use local testdata instead of heading out to the Internet each time
@@ -296,7 +297,7 @@ func TestInstallPkg(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
 		})
-		err := a.installPackage(pkg, &now)
+		err := a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install package")
 	})
 	t.Run("cache miss no network", func(t *testing.T) {
@@ -307,7 +308,7 @@ func TestInstallPkg(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{fail: true},
 		})
-		err := a.installPackage(pkg, &now)
+		err := a.installPackage(context.TODO(), pkg, &now)
 		require.Error(t, err, "should fail when no cache and no network")
 	})
 	t.Run("cache miss network should fill cache", func(t *testing.T) {
@@ -323,7 +324,7 @@ func TestInstallPkg(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
 		})
-		err = a.installPackage(pkg, &now)
+		err = a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install pkg")
 		// check that the package file is in place
 		_, err = os.Stat(cacheApkFile)
@@ -353,7 +354,7 @@ func TestInstallPkg(t *testing.T) {
 			// use a different root, so we get a different file
 			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
-		err = a.installPackage(pkg, &now)
+		err = a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install pkg")
 		// check that the package file is in place
 		_, err = os.Stat(cacheApkFile)
@@ -383,7 +384,7 @@ func TestInstallPkg(t *testing.T) {
 			// use a different root, so we get a different file
 			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
-		err = a.installPackage(pkg, &now)
+		err = a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install pkg")
 		// check that the package file is in place
 		_, err = os.Stat(cacheApkFile)
@@ -413,7 +414,7 @@ func TestInstallPkg(t *testing.T) {
 			// use a different root, so we get a different file
 			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
 		})
-		err = a.installPackage(pkg, &now)
+		err = a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install pkg")
 		// check that the package file is in place
 		_, err = os.Stat(cacheApkFile)
