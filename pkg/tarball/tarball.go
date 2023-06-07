@@ -28,6 +28,7 @@ type Context struct {
 	OverrideGname   string
 	SkipClose       bool
 	UseChecksums    bool
+	BaseDir         string
 	overridePerms   map[string]tar.Header
 }
 
@@ -72,6 +73,14 @@ func WithOverridePerms(files []tar.Header) Option {
 			overrides[f.Name] = f
 		}
 		ctx.overridePerms = overrides
+		return nil
+	}
+}
+
+// WithBaseDir prefixes the contents of the tar stream with the given directory.
+func WithBaseDir(directory string) Option {
+	return func(ctx *Context) error {
+		ctx.BaseDir = directory
 		return nil
 	}
 }
