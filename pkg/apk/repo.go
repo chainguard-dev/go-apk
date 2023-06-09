@@ -35,6 +35,14 @@ type NamedIndex interface {
 	Source() string
 }
 
+func indexNames(indexes []NamedIndex) []string {
+	names := make([]string, len(indexes))
+	for i, idx := range indexes {
+		names[i] = idx.Source()
+	}
+	return names
+}
+
 type namedRepositoryWithIndex struct {
 	name string
 	repo *repository.RepositoryWithIndex

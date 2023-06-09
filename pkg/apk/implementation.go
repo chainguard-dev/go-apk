@@ -403,13 +403,21 @@ func (a *APK) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflic
 	if err != nil {
 		return toInstall, conflicts, fmt.Errorf("error getting repository indexes: %w", err)
 	}
+	// debugging info, if requested
+	a.logger.Debugf("got %d indexes:\n%s", len(indexes), strings.Join(indexNames(indexes), "\n"))
+
 	// 2. Get the dependency tree for each package from the world file
 	directPkgs, err := a.GetWorld()
 	if err != nil {
 		return toInstall, conflicts, fmt.Errorf("error getting world packages: %w", err)
 	}
 	resolver := NewPkgResolver(indexes)
-	return resolver.GetPackagesWithDependencies(directPkgs)
+	toInstall, conflicts, err = resolver.GetPackagesWithDependencies(directPkgs)
+	if err != nil {
+		return
+	}
+	a.logger.Debugf("got %d packages to install:\n%s", len(toInstall), strings.Join(packageRefs(toInstall), "\n"))
+	return
 }
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
@@ -631,4 +639,12 @@ func (a *APK) installPackage(pkg *repository.RepositoryPackage, sourceDateEpoch 
 		return fmt.Errorf("unable to update installed file for pkg %s: %w", pkg.Name, err)
 	}
 	return nil
+}
+
+func packageRefs(pkgs []*repository.RepositoryPackage) []string {
+	names := make([]string, len(pkgs))
+	for i, pkg := range pkgs {
+		names[i] = fmt.Sprintf("%s (%s) %s", pkg.Name, pkg.Version, pkg.Url())
+	}
+	return names
 }
