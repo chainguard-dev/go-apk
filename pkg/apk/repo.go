@@ -246,7 +246,7 @@ func (p *PkgResolver) GetPackagesWithDependencies(packages []string) (toInstall 
 			return nil, nil, fmt.Errorf("could not find package %s", pkgName)
 		}
 		// do not add it to toInstall, as we want to have it in the correct order with dependencies
-		dependenciesMap[pkgName] = pkgs[0]
+		dependenciesMap[pkgs[0].Name] = pkgs[0]
 	}
 	// now get the dependencies for each package
 	for _, pkgName := range packages {
@@ -261,10 +261,12 @@ func (p *PkgResolver) GetPackagesWithDependencies(packages []string) (toInstall 
 			}
 			dependenciesMap[dep.Name] = dep
 		}
-		toInstall = append(toInstall, pkg)
-		installTracked[pkg.Name] = pkg
-		if _, ok := dependenciesMap[pkgName]; !ok {
-			dependenciesMap[pkgName] = pkg
+		if _, ok := installTracked[pkg.Name]; !ok {
+			toInstall = append(toInstall, pkg)
+			installTracked[pkg.Name] = pkg
+		}
+		if _, ok := dependenciesMap[pkg.Name]; !ok {
+			dependenciesMap[pkg.Name] = pkg
 		}
 		conflicts = append(conflicts, confs...)
 	}
