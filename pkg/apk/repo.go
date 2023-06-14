@@ -16,6 +16,7 @@ package apk
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -116,7 +117,7 @@ func (a *APK) GetRepositories() (repos []string, err error) {
 
 // getRepositoryIndexes returns the indexes for the repositories in the specified root.
 // The signatures for each index are verified unless ignoreSignatures is set to true.
-func (a *APK) getRepositoryIndexes(ignoreSignatures bool) ([]NamedIndex, error) {
+func (a *APK) getRepositoryIndexes(ctx context.Context, ignoreSignatures bool) ([]NamedIndex, error) {
 	// get the repository URLs
 	repos, err := a.GetRepositories()
 	if err != nil {
@@ -158,7 +159,7 @@ func (a *APK) getRepositoryIndexes(ignoreSignatures bool) ([]NamedIndex, error) 
 	if a.cache != nil {
 		httpClient = a.cache.client(httpClient, true)
 	}
-	return GetRepositoryIndexes(repos, keys, arch, WithIgnoreSignatures(ignoreSignatures), WithHTTPClient(httpClient))
+	return GetRepositoryIndexes(ctx, repos, keys, arch, WithIgnoreSignatures(ignoreSignatures), WithHTTPClient(httpClient))
 }
 
 // PkgResolver resolves packages from a list of indexes.

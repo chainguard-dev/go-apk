@@ -17,6 +17,7 @@ package apk
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -195,7 +196,7 @@ func (a *APK) ListInitFiles() []tar.Header {
 // Returns the list of files and directories and files installed and permissions,
 // unless those files will be included in the installed database, in which case they can
 // be retrieved via GetInstalled().
-func (a *APK) InitDB(versions ...string) error {
+func (a *APK) InitDB(ctx context.Context, versions ...string) error {
 	/*
 		equivalent of: "apk add --initdb --arch arch --root root"
 	*/
@@ -264,7 +265,7 @@ func (a *APK) InitDB(versions ...string) error {
 	// nothing to add to it; scripts.tar should be empty
 
 	// get the alpine-keys base keys for our usage
-	if err := a.fetchAlpineKeys(versions); err != nil {
+	if err := a.fetchAlpineKeys(ctx, versions); err != nil {
 		var nokeysErr *NoKeysFoundError
 		if !errors.As(err, &nokeysErr) {
 			return fmt.Errorf("failed to fetch alpine-keys: %w", err)
@@ -317,7 +318,7 @@ func (a *APK) loadSystemKeyring(locations ...string) ([]string, error) {
 }
 
 // Installs the specified keys into the APK keyring inside the build context.
-func (a *APK) InitKeyring(keyFiles, extraKeyFiles []string) (err error) {
+func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string) (err error) {
 	a.logger.Infof("initializing apk keyring")
 
 	if err := a.fs.MkdirAll(DefaultKeyRingPath, 0o755); err != nil {
@@ -362,7 +363,11 @@ func (a *APK) InitKeyring(keyFiles, extraKeyFiles []string) (err error) {
 				if client == nil {
 					client = &http.Client{}
 				}
-				resp, err := client.Get(asURL.String())
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, asURL.String(), nil)
+				if err != nil {
+					return err
+				}
+				resp, err := client.Do(req)
 				if err != nil {
 					return fmt.Errorf("failed to fetch apk key: %w", err)
 				}
@@ -394,12 +399,12 @@ func (a *APK) InitKeyring(keyFiles, extraKeyFiles []string) (err error) {
 }
 
 // ResolveWorld determine the target state for the requested dependencies in /etc/apk/world. Do not install anything.
-func (a *APK) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflicts []string, err error) {
+func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*repository.RepositoryPackage, conflicts []string, err error) {
 	a.logger.Infof("determining desired apk world")
 
 	// to fix the world, we need to:
 	// 1. Get the apkIndexes for each repository for the target arch
-	indexes, err := a.getRepositoryIndexes(a.ignoreSignatures)
+	indexes, err := a.getRepositoryIndexes(ctx, a.ignoreSignatures)
 	if err != nil {
 		return toInstall, conflicts, fmt.Errorf("error getting repository indexes: %w", err)
 	}
@@ -421,7 +426,7 @@ func (a *APK) ResolveWorld() (toInstall []*repository.RepositoryPackage, conflic
 }
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
-func (a *APK) FixateWorld(sourceDateEpoch *time.Time) error {
+func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error {
 	/*
 		equivalent of: "apk fix --arch arch --root root"
 		with possible options for --no-scripts, --no-cache, --update-cache
@@ -438,7 +443,7 @@ func (a *APK) FixateWorld(sourceDateEpoch *time.Time) error {
 	defer func() {
 		_ = a.unlock()
 	}()
-	allpkgs, conflicts, err := a.ResolveWorld()
+	allpkgs, conflicts, err := a.ResolveWorld(ctx)
 	if err != nil {
 		return fmt.Errorf("error getting package dependencies: %w", err)
 	}
@@ -473,7 +478,7 @@ func (a *APK) FixateWorld(sourceDateEpoch *time.Time) error {
 			continue
 		}
 		// get the apk file
-		if err := a.installPackage(pkg, sourceDateEpoch); err != nil {
+		if err := a.installPackage(ctx, pkg, sourceDateEpoch); err != nil {
 			return err
 		}
 	}
@@ -490,13 +495,17 @@ func (e *NoKeysFoundError) Error() string {
 }
 
 // fetchAlpineKeys fetches the public keys for the repositories in the APK database.
-func (a *APK) fetchAlpineKeys(versions []string) error {
+func (a *APK) fetchAlpineKeys(ctx context.Context, versions []string) error {
 	u := alpineReleasesURL
 	client := a.client
 	if client == nil {
 		client = &http.Client{}
 	}
-	res, err := client.Get(u)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return err
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch alpine releases: %w", err)
 	}
@@ -531,7 +540,11 @@ func (a *APK) fetchAlpineKeys(versions []string) error {
 	}
 	// get the keys for each URL and save them to a file with that name
 	for _, u := range urls {
-		res, err := client.Get(u)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return err
+		}
+		res, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to fetch alpine key %s: %w", u, err)
 		}
@@ -557,7 +570,7 @@ func (a *APK) fetchAlpineKeys(versions []string) error {
 // installPkg install a single package and update installed db.
 //
 
-func (a *APK) installPackage(pkg *repository.RepositoryPackage, sourceDateEpoch *time.Time) error {
+func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPackage, sourceDateEpoch *time.Time) error {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
 	u := pkg.Url()
@@ -595,7 +608,11 @@ func (a *APK) installPackage(pkg *repository.RepositoryPackage, sourceDateEpoch 
 		if a.cache != nil {
 			client = a.cache.client(client, false)
 		}
-		res, err := client.Get(u)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return err
+		}
+		res, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("unable to get package apk at %s: %w", u, err)
 		}

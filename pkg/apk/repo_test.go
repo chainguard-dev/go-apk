@@ -15,6 +15,7 @@
 package apk
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"os"
@@ -96,7 +97,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
 		})
-		indexes, err := a.getRepositoryIndexes(false)
+		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 	})
@@ -108,7 +109,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{fail: true},
 		})
-		_, err := a.getRepositoryIndexes(false)
+		_, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.Error(t, err, "should fail when no cache and no network")
 	})
 	t.Run("cache miss network should fill cache", func(t *testing.T) {
@@ -123,7 +124,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
 		})
-		indexes, err := a.getRepositoryIndexes(false)
+		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// check that the index file is in place
@@ -158,7 +159,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 			// the one in testdata/cache is different
 			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
-		indexes, err := a.getRepositoryIndexes(false)
+		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// check that the contents are the same
@@ -190,7 +191,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 			// the one in testdata/cache is different
 			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
 		})
-		indexes, err := a.getRepositoryIndexes(false)
+		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// check that the contents are the same
