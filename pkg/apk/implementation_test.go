@@ -163,7 +163,7 @@ func TestInitKeyring(t *testing.T) {
 	}
 	// ensure we send things from local
 	a.SetClient(&http.Client{
-		Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+		Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 	})
 
 	require.NoError(t, a.InitKeyring(context.TODO(), keyfiles, nil))
@@ -295,7 +295,7 @@ func TestInstallPkg(t *testing.T) {
 	t.Run("no cache", func(t *testing.T) {
 		a := prepLayout(t, "")
 		a.SetClient(&http.Client{
-			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
 		err := a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install package")
@@ -322,7 +322,7 @@ func TestInstallPkg(t *testing.T) {
 		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
 
 		a.SetClient(&http.Client{
-			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
 		err = a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install pkg")
@@ -332,7 +332,7 @@ func TestInstallPkg(t *testing.T) {
 		// check that the contents are the same
 		apk1, err := os.ReadFile(cacheApkFile)
 		require.NoError(t, err, "unable to read cache apk file")
-		apk2, err := os.ReadFile(filepath.Join("testdata", testPkgFilename))
+		apk2, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, testPkgFilename))
 		require.NoError(t, err, "unable to read previous apk file")
 		require.Equal(t, apk1, apk2, "apk files do not match")
 	})
@@ -344,7 +344,7 @@ func TestInstallPkg(t *testing.T) {
 		err := os.MkdirAll(repoDir, 0o755)
 		require.NoError(t, err, "unable to mkdir cache")
 
-		contents, err := os.ReadFile(filepath.Join("testdata", testPkgFilename))
+		contents, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, testPkgFilename))
 		require.NoError(t, err, "unable to read apk file")
 		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
 		err = os.WriteFile(cacheApkFile, contents, 0o644) //nolint:gosec // we're writing a test file
@@ -352,7 +352,7 @@ func TestInstallPkg(t *testing.T) {
 
 		a.SetClient(&http.Client{
 			// use a different root, so we get a different file
-			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
+			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
 		err = a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install pkg")
@@ -372,7 +372,7 @@ func TestInstallPkg(t *testing.T) {
 		err := os.MkdirAll(repoDir, 0o755)
 		require.NoError(t, err, "unable to mkdir cache")
 
-		contents, err := os.ReadFile(filepath.Join("testdata", testPkgFilename))
+		contents, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, testPkgFilename))
 		require.NoError(t, err, "unable to read apk file")
 		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
 		err = os.WriteFile(cacheApkFile, contents, 0o644) //nolint:gosec // we're writing a test file
@@ -382,7 +382,7 @@ func TestInstallPkg(t *testing.T) {
 
 		a.SetClient(&http.Client{
 			// use a different root, so we get a different file
-			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
+			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
 		err = a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install pkg")
@@ -402,7 +402,7 @@ func TestInstallPkg(t *testing.T) {
 		err := os.MkdirAll(repoDir, 0o755)
 		require.NoError(t, err, "unable to mkdir cache")
 
-		contents, err := os.ReadFile(filepath.Join("testdata", testPkgFilename))
+		contents, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, testPkgFilename))
 		require.NoError(t, err, "unable to read apk file")
 		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
 		err = os.WriteFile(cacheApkFile, contents, 0o644) //nolint:gosec // we're writing a test file
@@ -412,7 +412,7 @@ func TestInstallPkg(t *testing.T) {
 
 		a.SetClient(&http.Client{
 			// use a different root, so we get a different file
-			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
+			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
 		})
 		err = a.installPackage(context.TODO(), pkg, &now)
 		require.NoErrorf(t, err, "unable to install pkg")
@@ -422,7 +422,7 @@ func TestInstallPkg(t *testing.T) {
 		// check that the contents are the same as the original
 		apk1, err := os.ReadFile(cacheApkFile)
 		require.NoError(t, err, "unable to read cache apk file")
-		apk2, err := os.ReadFile(filepath.Join("testdata/cache", testPkgFilename))
+		apk2, err := os.ReadFile(filepath.Join(testAlternatePkgDir, testPkgFilename))
 		require.NoError(t, err, "unable to read testdata apk file")
 		require.Equal(t, apk1, apk2, "apk files do not match")
 	})

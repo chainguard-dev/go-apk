@@ -24,6 +24,11 @@ import (
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 )
 
+const (
+	testPrimaryPkgDir   = "testdata/alpine-316"
+	testAlternatePkgDir = "testdata/alpine-317"
+)
+
 type testLocalTransport struct {
 	fail         bool
 	root         string

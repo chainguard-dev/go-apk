@@ -16,11 +16,13 @@ package apk
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -95,7 +97,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 	t.Run("no cache", func(t *testing.T) {
 		a := prepLayout(t, "")
 		a.SetClient(&http.Client{
-			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
 		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
@@ -122,7 +124,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		indexFile := filepath.Join(repoDir, indexFilename)
 
 		a.SetClient(&http.Client{
-			Transport: &testLocalTransport{root: "testdata", basenameOnly: true},
+			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
 		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
@@ -133,7 +135,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		// check that the contents are the same
 		index1, err := os.ReadFile(indexFile)
 		require.NoError(t, err, "unable to read cache index file")
-		index2, err := os.ReadFile(filepath.Join("testdata", indexFilename))
+		index2, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
 		require.NoError(t, err, "unable to read previous index file")
 		require.Equal(t, index1, index2, "index files do not match")
 	})
@@ -144,7 +146,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
 		err := os.MkdirAll(repoDir, 0o755)
 		require.NoError(t, err, "unable to mkdir cache")
-		index, err := os.ReadFile(filepath.Join("testdata", indexFilename))
+		index, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
 		require.NoError(t, err, "unable to read index")
 		cacheIndexFile := filepath.Join(repoDir, indexFilename)
 		err = os.WriteFile(cacheIndexFile, index, 0o644) //nolint:gosec // we're writing a test file
@@ -156,8 +158,8 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a := prepLayout(t, tmpDir)
 		a.SetClient(&http.Client{
 			// since the etag is unchanged, our final file should be the same as the original
-			// the one in testdata/cache is different
-			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
+			// the one in testdata/alpine-317 is different
+			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
 		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
@@ -165,7 +167,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		// check that the contents are the same
 		index1, err := os.ReadFile(cacheIndexFile)
 		require.NoError(t, err, "unable to read cache index file")
-		index2, err := os.ReadFile(filepath.Join("testdata", indexFilename))
+		index2, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
 		require.NoError(t, err, "unable to read previous index file")
 		require.Equal(t, index1, index2, "index files do not match")
 	})
@@ -176,7 +178,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
 		err := os.MkdirAll(repoDir, 0o755)
 		require.NoError(t, err, "unable to mkdir cache")
-		index, err := os.ReadFile(filepath.Join("testdata", indexFilename))
+		index, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
 		require.NoError(t, err, "unable to read index")
 		cacheIndexFile := filepath.Join(repoDir, indexFilename)
 		err = os.WriteFile(cacheIndexFile, index, 0o644) //nolint:gosec // we're writing a test file
@@ -188,8 +190,8 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a := prepLayout(t, tmpDir)
 		a.SetClient(&http.Client{
 			// since the etag is unchanged, our final file should be the same as the original
-			// the one in testdata/cache is different
-			Transport: &testLocalTransport{root: "testdata/cache", basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
+			// the one in testdata/alpine-317 is different
+			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
 		})
 		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
@@ -197,13 +199,12 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		// check that the contents are the same
 		index1, err := os.ReadFile(cacheIndexFile)
 		require.NoError(t, err, "unable to read cache index file")
-		index2, err := os.ReadFile(filepath.Join("testdata/cache", indexFilename))
+		index2, err := os.ReadFile(filepath.Join(testAlternatePkgDir, indexFilename))
 		require.NoError(t, err, "unable to read previous index file")
 		require.Equal(t, index1, index2, "index files do not match")
 	})
 }
 
-//nolint:unparam // nothing uses the first arg for now, but we want to keep this around
 func testGetPackagesAndIndex() ([]*repository.RepositoryPackage, []*repository.RepositoryWithIndex) {
 	// create a tree of packages, including some multiple that depend on the same one
 	// but no circular dependencies; this is an acyclic graph
@@ -262,10 +263,13 @@ func testGetPackagesAndIndex() ([]*repository.RepositoryPackage, []*repository.R
 			{Name: "package5", Version: "1.5.0"},
 			{Name: "package5", Version: "1.5.1"},
 			{Name: "package5", Version: "2.0.0"},
+			{Name: "package5-special", Version: "1.2.0", Provides: []string{"package5=1.2.0"}},
 			{Name: "package6", Version: "1.5.1"},
 			{Name: "package6", Version: "2.0.0", Dependencies: []string{"package6", "package5"}},
 			{Name: "package7", Version: "1"},
 			{Name: "package8", Version: "2", Provides: []string{"package7=0.9"}},
+			{Name: "package9", Version: "2.0.0", Dependencies: []string{"package5"}},
+			{Name: "abc9", Version: "2.0.0", Dependencies: []string{"package5"}},
 		}
 		repoPackages = make([]*repository.RepositoryPackage, 0, len(packages))
 	)
@@ -281,26 +285,80 @@ func testGetPackagesAndIndex() ([]*repository.RepositoryPackage, []*repository.R
 }
 
 func TestGetPackagesWithDependences(t *testing.T) {
-	_, index := testGetPackagesAndIndex()
+	t.Run("names only", func(t *testing.T) {
+		_, index := testGetPackagesAndIndex()
 
-	names := []string{"package1", "package2"}
-	expectedPackage1 := []string{"dep4", "dep5", "dep1", "dep6", "foo", "libq", "dep3", "busybox", "dep2", "package1"}
-	expectedPackage2 := []string{"dep7", "package2"}
-	expected := make([]string, 0, len(expectedPackage1)+len(expectedPackage2))
-	expected = append(expected, expectedPackage1...)
-	expected = append(expected, expectedPackage2...)
-	// this should do a few things:
-	// - find all of the dependencies of all of the packages
-	// - eliminate duplicates
-	// - reverse the order, so that it is in order of installation
-	resolver := NewPkgResolver(testNamedRepositoryFromIndexes(index))
-	pkgs, _, err := resolver.GetPackagesWithDependencies(names)
-	require.NoErrorf(t, err, "unable to get packages")
-	var actual = make([]string, 0, len(pkgs))
-	for _, pkg := range pkgs {
-		actual = append(actual, pkg.Name)
-	}
-	require.True(t, reflect.DeepEqual(expected, actual), "packages mismatch:\nactual %v\nexpect %v", actual, expected)
+		names := []string{"package1", "package2"}
+		expectedPackage1 := []string{"dep4", "dep5", "dep1", "dep6", "foo", "libq", "dep3", "busybox", "dep2", "package1"}
+		expectedPackage2 := []string{"dep7", "package2"}
+		expected := make([]string, 0, len(expectedPackage1)+len(expectedPackage2))
+		expected = append(expected, expectedPackage1...)
+		expected = append(expected, expectedPackage2...)
+		// this should do a few things:
+		// - find all of the dependencies of all of the packages
+		// - eliminate duplicates
+		// - reverse the order, so that it is in order of installation
+		resolver := NewPkgResolver(testNamedRepositoryFromIndexes(index))
+		pkgs, _, err := resolver.GetPackagesWithDependencies(names)
+		require.NoErrorf(t, err, "unable to get packages")
+		var actual = make([]string, 0, len(pkgs))
+		for _, pkg := range pkgs {
+			actual = append(actual, pkg.Name)
+		}
+		require.True(t, reflect.DeepEqual(expected, actual), "packages mismatch:\nactual %v\nexpect %v", actual, expected)
+	})
+	t.Run("dependency in world", func(t *testing.T) {
+		// If a dependency is resolved by something in world, i.e. the explicit package list,
+		// that should override anything that comes up in dependencies, even if a higher version.
+		// This test checks that an override on something that provides package5, or even is package5,
+		// even with a lower version, will take priority.
+		// we use abc9 -> package5 rather than package9 -> package5, because world sorts alphabetically,
+		// and we want to ensure that, even though abc9 is processed first, package5 override still works.
+		_, index := testGetPackagesAndIndex()
+		resolver := NewPkgResolver(testNamedRepositoryFromIndexes(index))
+		t.Run("same name no lock", func(t *testing.T) {
+			name, version := "package5", "2.0.0" //nolint:goconst // no, we do not want to make it a constant
+			names := []string{name, "abc9"}
+			sort.Strings(names)
+			pkgs, _, err := resolver.GetPackagesWithDependencies(names)
+			require.NoErrorf(t, err, "unable to get packages")
+			require.Len(t, pkgs, 2)
+			for _, pkg := range pkgs {
+				if pkg.Name != name {
+					continue
+				}
+				require.Equal(t, version, pkg.Version)
+			}
+		})
+		t.Run("same name locked", func(t *testing.T) {
+			name, version := "package5", "1.5.1"
+			names := []string{fmt.Sprintf("%s=%s", name, version), "abc9"}
+			sort.Strings(names)
+			pkgs, _, err := resolver.GetPackagesWithDependencies(names)
+			require.NoErrorf(t, err, "unable to get packages")
+			require.Len(t, pkgs, 2)
+			for _, pkg := range pkgs {
+				if pkg.Name != name {
+					continue
+				}
+				require.Equal(t, version, pkg.Version)
+			}
+		})
+		t.Run("different name with provides", func(t *testing.T) {
+			providesName, version := "package5-special", "1.2.0"
+			names := []string{providesName, "abc9"}
+			sort.Strings(names)
+			pkgs, _, err := resolver.GetPackagesWithDependencies(names)
+			require.NoErrorf(t, err, "unable to get packages")
+			require.Len(t, pkgs, 2)
+			for _, pkg := range pkgs {
+				if pkg.Name != providesName {
+					continue
+				}
+				require.Equal(t, version, pkg.Version)
+			}
+		})
+	})
 }
 func TestGetPackageDependencies(t *testing.T) {
 	t.Run("normal dependencies", func(t *testing.T) {
@@ -361,6 +419,35 @@ func TestGetPackageDependencies(t *testing.T) {
 			})
 		}
 	})
+	t.Run("existing dependency", func(t *testing.T) {
+		origPkgs, index := testGetPackagesAndIndex()
+		resolver := NewPkgResolver(testNamedRepositoryFromIndexes(index))
+
+		// start with regular resolution, just to compare
+		expectedName := "package5"
+		expectedVersion := "2.0.0" // highest version
+		_, pkgs, _, err := resolver.GetPackageWithDependencies("package9", nil)
+		require.NoErrorf(t, err, "unable to get dependencies")
+		require.Len(t, pkgs, 1, "package9 should have one dependency, %s", expectedName)
+		require.Equal(t, expectedName, pkgs[0].Name)
+		require.Equal(t, expectedVersion, pkgs[0].Version)
+
+		// now make something pre-existing
+		expectedName = "package5-special"
+		expectedVersion = "1.2.0" // lower version than the highest
+		var existingPkgs = make(map[string]*repository.RepositoryPackage)
+		for _, p := range origPkgs {
+			if p.Name == expectedName && p.Version == expectedVersion {
+				existingPkgs[p.Name] = p
+				break
+			}
+		}
+		_, pkgs, _, err = resolver.GetPackageWithDependencies("package9", existingPkgs)
+		require.NoErrorf(t, err, "unable to get dependencies")
+		require.Len(t, pkgs, 1, "package9 should have one dependency, %s", expectedName)
+		require.Equal(t, expectedName, pkgs[0].Name)
+		require.Equal(t, expectedVersion, pkgs[0].Version)
+	})
 }
 
 func TestResolvePackage(t *testing.T) {
@@ -380,7 +467,7 @@ func TestResolvePackage(t *testing.T) {
 		resolver := NewPkgResolver(testNamedRepositoryFromIndexes(index))
 		pkgs, err := resolver.ResolvePackage("package5")
 		require.NoError(t, err)
-		require.Len(t, pkgs, 4)
+		require.Len(t, pkgs, 5)
 	})
 	t.Run("specific version", func(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
@@ -392,6 +479,12 @@ func TestResolvePackage(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, pkgs, 1)
 		require.Equal(t, version, pkgs[0].Version)
+
+		// and now one that does not exist
+		version = "1.0.1"
+		pkgs, err = resolver.ResolvePackage("package5=" + version)
+		require.Error(t, err, "package5 version 1.0.1 does not exist")
+		require.Len(t, pkgs, 0)
 	})
 	t.Run("greater than version", func(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
@@ -400,7 +493,7 @@ func TestResolvePackage(t *testing.T) {
 		resolver := NewPkgResolver(testNamedRepositoryFromIndexes(index))
 		pkgs, err := resolver.ResolvePackage("package5>1.0.0")
 		require.NoError(t, err)
-		require.Len(t, pkgs, 3)
+		require.Len(t, pkgs, 4)
 		// first version should be highest match
 		require.Equal(t, "2.0.0", pkgs[0].Version)
 	})

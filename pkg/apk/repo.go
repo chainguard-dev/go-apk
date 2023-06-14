@@ -260,7 +260,9 @@ func (p *PkgResolver) GetPackagesWithDependencies(packages []string) (toInstall 
 				toInstall = append(toInstall, dep)
 				installTracked[dep.Name] = dep
 			}
-			dependenciesMap[dep.Name] = dep
+			if _, ok := dependenciesMap[dep.Name]; !ok {
+				dependenciesMap[dep.Name] = dep
+			}
 		}
 		if _, ok := installTracked[pkg.Name]; !ok {
 			toInstall = append(toInstall, pkg)
@@ -576,12 +578,18 @@ func sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPacka
 		// see if one already is installed
 		iMatched, iOk := existing[pkgs[i].Name]
 		jMatched, jOk := existing[pkgs[j].Name]
-		if iOk && !jOk && iMatched.Version == pkgs[i].Version {
+
+		// because existing takes priority, if either matches, we should take it
+		// check if the first matches
+		if iOk && iMatched.Version == pkgs[i].Version && (!jOk || jMatched.Version != pkgs[j].Version) {
 			return true
 		}
-		if jOk && !iOk && jMatched.Version == pkgs[j].Version {
+		// the first did not match, check if the second matches
+		if jOk && jMatched.Version == pkgs[j].Version && (!iOk || iMatched.Version != pkgs[i].Version) {
 			return false
 		}
+		// both matched, so keep looking
+
 		// see if an origin already is installed
 		iOriginMatched := existingOrigins[pkgs[i].Origin]
 		jOriginMatched := existingOrigins[pkgs[j].Origin]
