@@ -630,5 +630,14 @@ func testNamedPackageFromPackages(pkgs []*repository.RepositoryPackage) (named [
 }
 
 func testNamedPackageFromVersionAndPin(version, pin string) *repositoryPackage {
-	return &repositoryPackage{RepositoryPackage: &repository.RepositoryPackage{Package: &repository.Package{Version: version}}, pinnedName: pin}
+	rp := repository.NewRepositoryPackage(
+		&repository.Package{Version: version},
+		&repository.RepositoryWithIndex{
+			Repository: &repository.Repository{Uri: "local"},
+		},
+	)
+	return &repositoryPackage{
+		RepositoryPackage: rp,
+		pinnedName:        pin,
+	}
 }
