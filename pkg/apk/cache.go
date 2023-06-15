@@ -115,14 +115,20 @@ func (t *cacheTransport) retrieveAndSaveFile(cacheFile, etagFile string, request
 	if err := os.MkdirAll(filepath.Dir(cacheFile), 0755); err != nil {
 		return nil, fmt.Errorf("unable to create cache directory: %w", err)
 	}
-	f, err := os.Create(cacheFile)
+	tmp, err := os.CreateTemp(filepath.Dir(cacheFile), "temp-*.apk")
 	if err != nil {
-		return nil, fmt.Errorf("unable to create cache file: %w", err)
+		return nil, fmt.Errorf("unable to create a temporary cache file: %w", err)
 	}
-	defer f.Close()
-	if _, err := io.Copy(f, resp.Body); err != nil {
-		return nil, fmt.Errorf("unable to write to cache file: %w", err)
+	if err := func() error {
+		defer tmp.Close()
+		if _, err := io.Copy(tmp, resp.Body); err != nil {
+			return fmt.Errorf("unable to write to cache file: %w", err)
+		}
+		return nil
+	}(); err != nil {
+		return nil, err
 	}
+
 	// was there an etag?
 	etag := resp.Header.Get("etag")
 	if etag != "" {
@@ -130,6 +136,12 @@ func (t *cacheTransport) retrieveAndSaveFile(cacheFile, etagFile string, request
 			return nil, fmt.Errorf("unable to write etag file: %w", err)
 		}
 	}
+
+	// Now that we have the file and (maybe) etag, atomically populate the cache
+	if err := os.Rename(tmp.Name(), cacheFile); err != nil {
+		return nil, fmt.Errorf("unable to populate cache: %v", err)
+	}
+
 	// return a handler to our file
 	f2, err := os.Open(cacheFile)
 	if err != nil {
