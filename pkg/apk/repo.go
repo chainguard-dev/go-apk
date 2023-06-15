@@ -471,7 +471,11 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 		if ok {
 			// pkgsWithVersions contains a map of all versions of the package
 			// get the one that most matches what was requested
-			pkgs := filterPackages(depPkgWithVersions, withVersion(version, compare), withAllowPin(allowPin))
+			pkgs := filterPackages(depPkgWithVersions,
+				withVersion(version, compare),
+				withAllowPin(allowPin),
+				withInstalledPackage(existing[name]),
+			)
 			if len(pkgs) == 0 {
 				return nil, nil, fmt.Errorf("could not find package %s in indexes", dep)
 			}

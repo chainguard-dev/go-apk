@@ -19,6 +19,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
 )
 
 // versionRegex how to parse versions.
@@ -404,6 +406,7 @@ type filterOptions struct {
 	allowPin  string
 	preferPin string
 	version   string
+	installed *repository.RepositoryPackage
 	compare   versionDependency
 }
 
@@ -425,6 +428,11 @@ func withVersion(version string, compare versionDependency) filterOption {
 		o.compare = compare
 	}
 }
+func withInstalledPackage(pkg *repository.RepositoryPackage) filterOption {
+	return func(o *filterOptions) {
+		o.installed = pkg
+	}
+}
 
 func filterPackages(pkgs []*repositoryPackage, opts ...filterOption) []*repositoryPackage {
 	o := &filterOptions{
@@ -436,12 +444,19 @@ func filterPackages(pkgs []*repositoryPackage, opts ...filterOption) []*reposito
 
 	// go through all potential versions, save the ones that meet the constraints,
 	// then take the highest
-	var passed []*repositoryPackage
+	var (
+		passed       []*repositoryPackage
+		installedURL string
+	)
+	if o.installed != nil {
+		installedURL = o.installed.Url()
+	}
 	for _, p := range pkgs {
 		// do we allow this package?
 
 		// if it has a pinned name, and it is not preferred or allowed, we reject it immediately
-		if p.pinnedName != "" && p.pinnedName != o.allowPin && p.pinnedName != o.preferPin {
+		// unless it already was allowed installed from elsewhere
+		if (p.pinnedName != "" && p.pinnedName != o.allowPin && p.pinnedName != o.preferPin) && (o.installed == nil || installedURL != p.Url()) {
 			continue
 		}
 		if o.compare == versionNone {

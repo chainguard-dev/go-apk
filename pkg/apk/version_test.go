@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
 )
 
 func TestParseVersion(t *testing.T) {
@@ -847,39 +848,51 @@ func TestCompareVersion(t *testing.T) {
 }
 
 func TestResolveVersion(t *testing.T) {
+	pinPackage := testNamedPackageFromVersionAndPin("2.1.0", "pinA")
+	lowestPackage := testNamedPackageFromVersionAndPin("1.2.3-r0", "")
 	pkgs := []*repositoryPackage{
-		testNamedPackageFromVersionAndPin("1.2.3-r0", ""),
+		lowestPackage,
 		testNamedPackageFromVersionAndPin("1.3.6-r0", ""),
 		testNamedPackageFromVersionAndPin("1.2.8-r0", ""),
 		testNamedPackageFromVersionAndPin("1.7.1-r0", ""),
 		testNamedPackageFromVersionAndPin("1.7.1-r1", ""),
 		testNamedPackageFromVersionAndPin("2.0.6-r0", ""),
-		testNamedPackageFromVersionAndPin("2.1.0", "pinA"),
+		pinPackage,
 	}
 	tests := []struct {
 		version     string
 		compare     versionDependency
 		pin         string
+		installed   *repository.RepositoryPackage
 		want        string
 		description string
 	}{
-		{"1.2.3-r0", versionEqual, "", "1.2.3-r0", "exact version match"},
-		{"1.2.3-r10000", versionEqual, "", "", "exact version no match"},
-		{"2.0.0", versionGreater, "", "2.0.6-r0", "greater than version match"},
-		{"2.0.0", versionGreaterEqual, "", "2.0.6-r0", "greater than or equal to version match"},
-		{"3.0.0", versionGreaterEqual, "", "", "greater than or equal to version no match"},
-		{"2.1.0", versionEqual, "", "", "equal match but pinned"},
-		{"2.1.0", versionEqual, "pinA", "2.1.0", "equal match and pin match"},
-		{"", versionNone, "", "2.0.6-r0", "no requirement should get highest version"},
-		{"1.6", versionTilde, "", "", "no match"},
-		{"1.7", versionTilde, "", "1.7.1-r1", "fits within"},
-		{"1.7.1", versionTilde, "", "1.7.1-r1", "fits within"},
-		{"1.7.1-r2", versionTilde, "", "", "no match"},
+		{"1.2.3-r0", versionEqual, "", nil, "1.2.3-r0", "exact version match"},
+		{"1.2.3-r10000", versionEqual, "", nil, "", "exact version no match"},
+		{"2.0.0", versionGreater, "", nil, "2.0.6-r0", "greater than version match"},
+		{"2.0.0", versionGreaterEqual, "", nil, "2.0.6-r0", "greater than or equal to version match"},
+		{"2.0.0", versionGreaterEqual, "", pinPackage.RepositoryPackage, "2.1.0", "greater than or equal to version match with pin preinstalled"},
+		{"3.0.0", versionGreaterEqual, "", nil, "", "greater than or equal to version no match"},
+		{"2.1.0", versionEqual, "", nil, "", "equal match but pinned"},
+		{"2.1.0", versionEqual, "", pinPackage.RepositoryPackage, "2.1.0", "equal match but pinned yet already installed"},
+		{"2.1.0", versionEqual, "pinA", nil, "2.1.0", "equal match and pin match"},
+		{"", versionNone, "", nil, "2.0.6-r0", "no requirement should get highest version"},
+		{"", versionNone, "", pinPackage.RepositoryPackage, pinPackage.Version, "no requirement should get highest version with pin, if installed"},
+		{"", versionNone, "", lowestPackage.RepositoryPackage, lowestPackage.Version, "no requirement should get installed priority"},
+		{"1.6", versionTilde, "", nil, "", "no match"},
+		{"1.7", versionTilde, "", nil, "1.7.1-r1", "fits within"},
+		{"1.7.1", versionTilde, "", nil, "1.7.1-r1", "fits within"},
+		{"1.7.1-r2", versionTilde, "", nil, "", "no match"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			found := filterPackages(pkgs, withVersion(tt.version, tt.compare), withPreferPin(tt.pin))
-			sortPackages(found, nil, "", nil, tt.pin)
+			found := filterPackages(pkgs, withVersion(tt.version, tt.compare), withPreferPin(tt.pin), withInstalledPackage(tt.installed))
+			// add the existing in, if any
+			existing := make(map[string]*repository.RepositoryPackage)
+			if tt.installed != nil {
+				existing[tt.installed.Name] = tt.installed
+			}
+			sortPackages(found, nil, "", existing, tt.pin)
 			if tt.want == "" {
 				require.Nil(t, found, "version resolver should not find a package")
 			} else {
