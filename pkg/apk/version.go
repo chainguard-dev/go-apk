@@ -370,36 +370,50 @@ func (v versionDependency) satisfies(actualVersion, requiredVersion packageVersi
 	}
 }
 
-func resolvePackageNameVersionPin(pkgName string) (name, version string, dep versionDependency, pin string) {
+type pinStuff struct {
+	name    string
+	version string
+	dep     versionDependency
+	pin     string
+}
+
+func resolvePackageNameVersionPin(pkgName string) pinStuff {
 	parts := packageNameRegex.FindAllStringSubmatch(pkgName, -1)
 	if len(parts) == 0 || len(parts[0]) < 2 {
-		return pkgName, version, versionNone, pin
+		return pinStuff{
+			name: pkgName,
+			dep:  versionNone,
+		}
 	}
 	// layout: [full match, name, =version, =|>|<, version, @pin, pin]
-	name = parts[0][1]
+	p := pinStuff{
+		name:    parts[0][1],
+		version: parts[0][4],
+		pin:     parts[0][6],
+		dep:     versionNone,
+	}
+
 	matcher := parts[0][3]
-	version = parts[0][4]
-	pin = parts[0][6]
 	if matcher != "" {
 		// we have an equal
 		switch matcher {
 		case "=":
-			dep = versionEqual
+			p.dep = versionEqual
 		case ">":
-			dep = versionGreater
+			p.dep = versionGreater
 		case "<":
-			dep = versionLess
+			p.dep = versionLess
 		case ">=":
-			dep = versionGreaterEqual
+			p.dep = versionGreaterEqual
 		case "<=":
-			dep = versionLessEqual
+			p.dep = versionLessEqual
 		case "~":
-			dep = versionTilde
+			p.dep = versionTilde
 		default:
-			dep = versionNone
+			p.dep = versionNone
 		}
 	}
-	return
+	return p
 }
 
 type filterOptions struct {
@@ -434,7 +448,7 @@ func withInstalledPackage(pkg *repository.RepositoryPackage) filterOption {
 	}
 }
 
-func filterPackages(pkgs []*repositoryPackage, opts ...filterOption) []*repositoryPackage {
+func (p *PkgResolver) filterPackages(pkgs []*repositoryPackage, opts ...filterOption) []*repositoryPackage {
 	o := &filterOptions{
 		compare: versionNone,
 	}
@@ -451,50 +465,51 @@ func filterPackages(pkgs []*repositoryPackage, opts ...filterOption) []*reposito
 	if o.installed != nil {
 		installedURL = o.installed.Url()
 	}
-	for _, p := range pkgs {
+	for _, pkg := range pkgs {
 		// do we allow this package?
 
 		// if it has a pinned name, and it is not preferred or allowed, we reject it immediately
 		// unless it already was allowed installed from elsewhere
-		if (p.pinnedName != "" && p.pinnedName != o.allowPin && p.pinnedName != o.preferPin) && (o.installed == nil || installedURL != p.Url()) {
+		if (pkg.pinnedName != "" && pkg.pinnedName != o.allowPin && pkg.pinnedName != o.preferPin) && (o.installed == nil || installedURL != pkg.Url()) {
 			continue
 		}
 		if o.compare == versionNone {
-			passed = append(passed, p)
+			passed = append(passed, pkg)
 			continue
 		}
 
-		requiredVersion, err := parseVersion(o.version)
+		// We check this error later in the loop.
+		requiredVersion, reqErr := p.parseVersion(o.version)
 		// if the required version is invalid, we can't compare, so we return no matches
-		if err != nil {
+		if reqErr != nil {
 			return nil
 		}
 
-		actualVersion, err := parseVersion(p.Version)
+		actualVersion, err := p.parseVersion(pkg.Version)
 		// skip invalid ones
 		if err != nil {
 			continue
 		}
 
 		if o.compare.satisfies(actualVersion, requiredVersion) {
-			passed = append(passed, p)
+			passed = append(passed, pkg)
 			continue
 		}
 
-		for _, prov := range p.Provides {
-			_, version, _, _ := resolvePackageNameVersionPin(prov)
+		for _, prov := range pkg.Provides {
+			version := p.resolvePackageNameVersionPin(prov).version
 			if version == "" {
 				continue
 			}
 
-			actualVersion, err = parseVersion(version)
+			actualVersion, err = p.parseVersion(version)
 			// again, we skip invalid ones
 			if err != nil {
 				continue
 			}
 
 			if o.compare.satisfies(actualVersion, requiredVersion) {
-				passed = append(passed, p)
+				passed = append(passed, pkg)
 				break
 			}
 		}

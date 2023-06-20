@@ -35,6 +35,7 @@ type NamedIndex interface {
 	Name() string
 	Packages() []*repository.RepositoryPackage
 	Source() string
+	Count() int
 }
 
 func indexNames(indexes []NamedIndex) []string {
@@ -59,6 +60,13 @@ func NewNamedRepositoryWithIndex(name string, repo *repository.RepositoryWithInd
 
 func (n *namedRepositoryWithIndex) Name() string {
 	return n.name
+}
+
+func (n *namedRepositoryWithIndex) Count() int {
+	if n.repo == nil {
+		return 0
+	}
+	return n.repo.Count()
 }
 
 func (n *namedRepositoryWithIndex) Packages() []*repository.RepositoryPackage {
@@ -180,6 +188,9 @@ type PkgResolver struct {
 	nameMap      map[string][]*repositoryPackage
 	providesMap  map[string][]*repositoryPackage
 	installIfMap map[string][]*repositoryPackage // contains any package that should be installed if the named package is installed
+
+	parsedVersions map[string]packageVersion
+	depForVersion  map[string]pinStuff
 }
 
 // NewPkgResolver creates a new pkgResolver from a list of indexes.
@@ -188,14 +199,22 @@ func NewPkgResolver(ctx context.Context, indexes []NamedIndex) *PkgResolver {
 	_, span := otel.Tracer("go-apk").Start(ctx, "NewPkgResolver")
 	defer span.End()
 
+	numPackages := 0
+	for _, index := range indexes {
+		numPackages += index.Count()
+	}
+
 	var (
-		pkgNameMap     = map[string][]*repositoryPackage{}
-		pkgProvidesMap = map[string][]*repositoryPackage{}
+		pkgNameMap     = make(map[string][]*repositoryPackage, numPackages)
+		pkgProvidesMap = make(map[string][]*repositoryPackage, numPackages)
 		installIfMap   = map[string][]*repositoryPackage{}
 	)
 	p := &PkgResolver{
-		indexes: indexes,
+		indexes:        indexes,
+		parsedVersions: map[string]packageVersion{},
+		depForVersion:  map[string]pinStuff{},
 	}
+
 	// create a map of every package by name and version to its RepositoryPackage
 	for _, index := range indexes {
 		for _, pkg := range index.Packages() {
@@ -215,14 +234,14 @@ func NewPkgResolver(ctx context.Context, indexes []NamedIndex) *PkgResolver {
 		}
 	}
 	// create a map of every provided file to its package
-	allPkgs := make([][]*repositoryPackage, 0, 10)
+	allPkgs := make([][]*repositoryPackage, 0, len(pkgNameMap))
 	for _, pkgVersions := range pkgNameMap {
 		allPkgs = append(allPkgs, pkgVersions)
 	}
 	for _, pkgVersions := range allPkgs {
 		for _, pkg := range pkgVersions {
 			for _, provide := range pkg.Provides {
-				name, _, _, _ := resolvePackageNameVersionPin(provide)
+				name := p.resolvePackageNameVersionPin(provide).name
 				pkgNameMap[name] = append(pkgNameMap[name], pkg)
 				if _, ok := pkgProvidesMap[name]; !ok {
 					pkgProvidesMap[name] = []*repositoryPackage{}
@@ -244,7 +263,7 @@ func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages 
 	defer span.End()
 
 	var (
-		dependenciesMap = map[string]*repository.RepositoryPackage{}
+		dependenciesMap = make(map[string]*repository.RepositoryPackage, len(packages))
 		installTracked  = map[string]*repository.RepositoryPackage{}
 	)
 	// first get the explicitly named packages
@@ -296,7 +315,7 @@ func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages 
 // Must not modify the existing map directly.
 func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[string]*repository.RepositoryPackage) (*repository.RepositoryPackage, []*repository.RepositoryPackage, []string, error) {
 	parents := make(map[string]bool)
-	localExisting := make(map[string]*repository.RepositoryPackage)
+	localExisting := make(map[string]*repository.RepositoryPackage, len(existing))
 	for k, v := range existing {
 		localExisting[k] = v
 	}
@@ -310,14 +329,14 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 	}
 	pkg := pkgs[0]
 
-	_, _, _, pin := resolvePackageNameVersionPin(pkgName) //nolint:dogsled
+	pin := p.resolvePackageNameVersionPin(pkgName).pin
 	deps, conflicts, err := p.getPackageDependencies(pkg, pin, true, parents, localExisting)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	// eliminate duplication in dependencies
-	added := map[string]*repository.RepositoryPackage{}
-	dependencies := []*repository.RepositoryPackage{}
+	added := make(map[string]*repository.RepositoryPackage, len(deps))
+	dependencies := make([]*repository.RepositoryPackage, 0, len(deps))
 	for _, dep := range deps {
 		if _, ok := added[dep.Name]; !ok {
 			dependencies = append(dependencies, dep)
@@ -325,12 +344,9 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 		}
 	}
 	// are there any installIf dependencies?
-	var (
-		depPkgList []*repositoryPackage
-		ok         bool
-	)
 	for dep, depPkg := range added {
-		if depPkgList, ok = p.installIfMap[dep]; !ok {
+		depPkgList, ok := p.installIfMap[dep]
+		if !ok {
 			depPkgList, ok = p.installIfMap[fmt.Sprintf("%s=%s", dep, depPkg.Version)]
 		}
 		if !ok {
@@ -341,7 +357,8 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 			var matchCount int
 			for _, subDep := range installIfPkg.InstallIf {
 				// two possibilities: package name, or name=version
-				name, version, _, _ := resolvePackageNameVersionPin(subDep)
+				stuff := p.resolvePackageNameVersionPin(subDep)
+				name, version := stuff.name, stuff.version
 				// precise match of whatever it is, take it and continue
 				if _, ok := added[subDep]; ok {
 					matchCount++
@@ -369,31 +386,33 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 // that satisfy the constraint. The list will be sorted by version number, with the highest version first
 // and decreasing from there. In general, the first one in the list is the best match. This function
 // returns multiple in case you need to see all potential matches.
-func (p *PkgResolver) ResolvePackage(pkgName string) (pkgs []*repository.RepositoryPackage, err error) {
-	name, version, compare, pin := resolvePackageNameVersionPin(pkgName)
+func (p *PkgResolver) ResolvePackage(pkgName string) ([]*repository.RepositoryPackage, error) {
+	stuff := p.resolvePackageNameVersionPin(pkgName)
+	name, version, compare, pin := stuff.name, stuff.version, stuff.dep, stuff.pin
 	pkgsWithVersions, ok := p.nameMap[name]
 	var packages []*repositoryPackage
 	if ok {
 		// pkgsWithVersions contains a map of all versions of the package
 		// get the one that most matches what was requested
-		packages = filterPackages(pkgsWithVersions, withVersion(version, compare), withPreferPin(pin))
+		packages = p.filterPackages(pkgsWithVersions, withVersion(version, compare), withPreferPin(pin))
 		if len(packages) == 0 {
 			return nil, fmt.Errorf("could not find package %s in indexes", pkgName)
 		}
-		sortPackages(packages, nil, name, nil, pin)
+		p.sortPackages(packages, nil, name, nil, pin)
 	} else {
 		providers, ok := p.providesMap[name]
 		if !ok || len(providers) == 0 {
 			return nil, fmt.Errorf("could not find package, alias or a package that provides %s in indexes", pkgName)
 		}
 		// we are going to do this in reverse order
-		sortPackages(providers, nil, name, nil, "")
+		p.sortPackages(providers, nil, name, nil, "")
 		packages = providers
 	}
+	pkgs := make([]*repository.RepositoryPackage, 0, len(packages))
 	for _, pkg := range packages {
 		pkgs = append(pkgs, pkg.RepositoryPackage)
 	}
-	return
+	return pkgs, nil
 }
 
 // getPackageDependencies get all of the dependencies for a single package based on the
@@ -429,10 +448,10 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 	if _, ok := parents[pkg.Name]; ok {
 		return nil, nil, nil
 	}
-	myProvides := map[string]bool{}
+	myProvides := make(map[string]bool, 2*len(pkg.Provides))
 	// see if we provide this
 	for _, provide := range pkg.Provides {
-		name, _, _, _ := resolvePackageNameVersionPin(provide)
+		name := p.resolvePackageNameVersionPin(provide).name
 		myProvides[provide] = true
 		myProvides[name] = true
 	}
@@ -451,7 +470,8 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 			continue
 		}
 		// this package might be pinned to a version
-		name, version, compare, _ := resolvePackageNameVersionPin(dep)
+		stuff := p.resolvePackageNameVersionPin(dep)
+		name, version, compare := stuff.name, stuff.version, stuff.dep
 		// see if we provide this
 		if myProvides[name] || myProvides[dep] {
 			// we provide this, so skip it
@@ -463,9 +483,9 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 				actualVersion, requiredVersion packageVersion
 				err1, err2                     error
 			)
-			actualVersion, err1 = parseVersion(pkg.Version)
+			actualVersion, err1 = p.parseVersion(pkg.Version)
 			if compare != versionNone {
-				requiredVersion, err2 = parseVersion(version)
+				requiredVersion, err2 = p.parseVersion(version)
 			}
 			// we accept invalid versions for ourself, but do not try to use it to fulfill
 			if err1 == nil && err2 == nil {
@@ -481,7 +501,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 		if ok {
 			// pkgsWithVersions contains a map of all versions of the package
 			// get the one that most matches what was requested
-			pkgs := filterPackages(depPkgWithVersions,
+			pkgs := p.filterPackages(depPkgWithVersions,
 				withVersion(version, compare),
 				withAllowPin(allowPin),
 				withInstalledPackage(existing[name]),
@@ -489,7 +509,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 			if len(pkgs) == 0 {
 				return nil, nil, fmt.Errorf("could not find package %s in indexes", dep)
 			}
-			sortPackages(pkgs, nil, name, existing, "")
+			p.sortPackages(pkgs, nil, name, existing, "")
 			depPkg = pkgs[0].RepositoryPackage
 		} else {
 			// it was not the name of a package, see if some package provides this
@@ -520,7 +540,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 				continue
 			}
 			// we are going to do this in reverse order
-			sortPackages(providers, pkg, name, existing, "")
+			p.sortPackages(providers, pkg, name, existing, "")
 			depPkg = providers[0].RepositoryPackage
 		}
 		// and then recurse to its children
@@ -546,6 +566,33 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 	return dependencies, conflicts, nil
 }
 
+func (p *PkgResolver) parseVersion(version string) (packageVersion, error) {
+	pkg, ok := p.parsedVersions[version]
+	if ok {
+		return pkg, nil
+	}
+
+	parsed, err := parseVersion(version)
+	if err != nil {
+		return parsed, err
+	}
+
+	p.parsedVersions[version] = parsed
+	return parsed, nil
+}
+
+func (p *PkgResolver) resolvePackageNameVersionPin(pkgName string) pinStuff {
+	cached, ok := p.depForVersion[pkgName]
+	if ok {
+		return cached
+	}
+
+	pin := resolvePackageNameVersionPin(pkgName)
+
+	p.depForVersion[pkgName] = pin
+	return pin
+}
+
 // sortPackages sorts a slice of packages in descending order of preference, based on
 // matching origin to a provided comparison package, whether or not one of the packages
 // already is installed, the versions, and whether an origin already exists.
@@ -555,9 +602,9 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 // For example, if the original search was for package "a", then pkgs may contain some that
 // are named "a", but others that provided "a". In that case, we should look not at the
 // version of the package, but the version of "a" that the package provides.
-func sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPackage, name string, existing map[string]*repository.RepositoryPackage, pin string) { //nolint:gocyclo
+func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPackage, name string, existing map[string]*repository.RepositoryPackage, pin string) { //nolint:gocyclo
 	// get existing origins
-	existingOrigins := map[string]bool{}
+	existingOrigins := make(map[string]bool, len(existing))
 	for _, pkg := range existing {
 		if pkg != nil && pkg.Origin != "" {
 			existingOrigins[pkg.Origin] = true
@@ -565,8 +612,8 @@ func sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPacka
 	}
 	sort.Slice(pkgs, func(i, j int) bool {
 		// determine versions
-		iVersionStr := getDepVersionForName(pkgs[i], name)
-		jVersionStr := getDepVersionForName(pkgs[j], name)
+		iVersionStr := p.getDepVersionForName(pkgs[i], name)
+		jVersionStr := p.getDepVersionForName(pkgs[j], name)
 		if compare != nil {
 			// matching repository
 			pkgRepo := compare.Repository().Uri
@@ -625,11 +672,11 @@ func sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPacka
 		}
 		// both matched or both did not, so just compare versions
 		// version priority
-		iVersion, err := parseVersion(iVersionStr)
+		iVersion, err := p.parseVersion(iVersionStr)
 		if err != nil {
 			return false
 		}
-		jVersion, err := parseVersion(jVersionStr)
+		jVersion, err := p.parseVersion(jVersionStr)
 		if err != nil {
 			return false
 		}
@@ -639,11 +686,11 @@ func sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPacka
 		}
 		// if versions are equal, they might not be the same as the package versions
 		if iVersionStr != pkgs[i].Version || jVersionStr != pkgs[j].Version {
-			iVersion, err := parseVersion(pkgs[i].Version)
+			iVersion, err := p.parseVersion(pkgs[i].Version)
 			if err != nil {
 				return false
 			}
-			jVersion, err := parseVersion(pkgs[j].Version)
+			jVersion, err := p.parseVersion(pkgs[j].Version)
 			if err != nil {
 				return false
 			}
@@ -666,12 +713,13 @@ func sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPacka
 //
 // Note that the calling function might decide to ignore this and use the package
 // version anyways.
-func getDepVersionForName(pkg *repositoryPackage, name string) string {
+func (p *PkgResolver) getDepVersionForName(pkg *repositoryPackage, name string) string {
 	if name == "" || name == pkg.Name {
 		return pkg.Version
 	}
 	for _, prov := range pkg.Provides {
-		pName, pVersion, _, _ := resolvePackageNameVersionPin(prov)
+		stuff := p.resolvePackageNameVersionPin(prov)
+		pName, pVersion := stuff.name, stuff.version
 		if pVersion == "" {
 			pVersion = pkg.Version
 		}

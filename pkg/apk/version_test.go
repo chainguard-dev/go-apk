@@ -15,6 +15,7 @@
 package apk
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -886,13 +887,14 @@ func TestResolveVersion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			found := filterPackages(pkgs, withVersion(tt.version, tt.compare), withPreferPin(tt.pin), withInstalledPackage(tt.installed))
+			pr := NewPkgResolver(context.Background(), []NamedIndex{})
+			found := pr.filterPackages(pkgs, withVersion(tt.version, tt.compare), withPreferPin(tt.pin), withInstalledPackage(tt.installed))
 			// add the existing in, if any
 			existing := make(map[string]*repository.RepositoryPackage)
 			if tt.installed != nil {
 				existing[tt.installed.Name] = tt.installed
 			}
-			sortPackages(found, nil, "", existing, tt.pin)
+			pr.sortPackages(found, nil, "", existing, tt.pin)
 			if tt.want == "" {
 				require.Nil(t, found, "version resolver should not find a package")
 			} else {
@@ -925,11 +927,11 @@ func TestResolverPackageNameVersionPin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			name, version, dep, pin := resolvePackageNameVersionPin(tt.input)
-			require.Equal(t, tt.name, name)
-			require.Equal(t, tt.version, version)
-			require.Equal(t, tt.dep, dep)
-			require.Equal(t, tt.pin, pin)
+			stuff := resolvePackageNameVersionPin(tt.input)
+			require.Equal(t, tt.name, stuff.name)
+			require.Equal(t, tt.version, stuff.version)
+			require.Equal(t, tt.dep, stuff.dep)
+			require.Equal(t, tt.pin, stuff.pin)
 		})
 	}
 }

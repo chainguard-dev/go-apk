@@ -656,7 +656,8 @@ func TestSortPackages(t *testing.T) {
 				existing[pkg.pkg.Name] = repository.NewRepositoryPackage(pkg.pkg, &repository.RepositoryWithIndex{Repository: &repository.Repository{Uri: pkg.repo}})
 			}
 			namedPkgs := testNamedPackageFromPackages(pkgs)
-			sortPackages(namedPkgs, pkg, "", existing, "")
+			pr := NewPkgResolver(context.Background(), []NamedIndex{})
+			pr.sortPackages(namedPkgs, pkg, "", existing, "")
 			for i, pkg := range namedPkgs {
 				require.Equal(t, int(pkg.InstalledSize), i, "position matches")
 			}
