@@ -17,11 +17,14 @@ package apk
 import (
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // cache
@@ -48,6 +51,7 @@ type cacheTransport struct {
 }
 
 func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	rid := rand.Intn(10000)
 	// do we have the file in the cache?
 	if request.URL == nil {
 		return nil, fmt.Errorf("no URL in request")
@@ -56,6 +60,11 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 	if err != nil {
 		return nil, fmt.Errorf("invalid cache path based on URL: %w", err)
 	}
+	logger := log.WithFields(log.Fields{
+		"rid":       rid,
+		"cacheFile": cacheFile,
+	})
+	logger.Printf("started")
 
 	// If an etag isn't required, then check the cache based on a simple
 	// filename-based naming scheme.
@@ -69,14 +78,16 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 				return cacheFile, nil
 			})
 		}
+		logger.Printf("cacheFile failed, returning 200")
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       f,
 		}, nil
 	}
-
+	logger.Printf("etagfile found, checking remote via HEAD")
 	resp, err := t.wrapped.Head(request.URL.String())
 	if err != nil || resp.StatusCode != 200 {
+		logger.Printf("remote HEAD did not succeed, returning error %v", err)
 		return resp, err
 	}
 	initialEtag, ok := etagFromResponse(resp)
@@ -100,6 +111,7 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 			return filepath.Join(filepath.Dir(cacheFile), finalEtag+".etag"), nil
 		})
 	}
+	logger.Printf("success, returning 200")
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       f,
