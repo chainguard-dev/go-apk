@@ -17,6 +17,7 @@ package apk
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.alpinelinux.org/alpine/go/repository"
+	"golang.org/x/sync/errgroup"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 )
@@ -114,14 +116,11 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		_, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.Error(t, err, "should fail when no cache and no network")
 	})
-	t.Run("cache miss network should fill cache", func(t *testing.T) {
+	t.Run("we can fetch, but do not cache indices without etag", func(t *testing.T) {
 		// we use a transport that can read from the network
 		// it should fail for a cache hit
 		tmpDir := t.TempDir()
 		a := prepLayout(t, tmpDir)
-		// fill the cache
-		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
-		indexFile := filepath.Join(repoDir, indexFilename)
 
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
@@ -129,11 +128,36 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
-		// check that the index file is in place
-		_, err = os.Stat(indexFile)
-		require.NoError(t, err, "index file not found in cache")
+
+		require.NoError(t, filepath.WalkDir(tmpDir, func(path string, d fs.DirEntry, err error) error {
+			if filepath.Ext(path) == ".etag" {
+				t.Errorf("found etag file %q, expected none.", path)
+			}
+			return nil
+		}))
+	})
+	t.Run("cache miss network should fill cache", func(t *testing.T) {
+		// we use a transport that can read from the network
+		// it should fail for a cache hit
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir)
+		// fill the cache
+		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
+
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{
+				root:         testPrimaryPkgDir,
+				basenameOnly: true,
+				headers: map[string][]string{
+					http.CanonicalHeaderKey("etag"): {"an-etag"},
+				},
+			},
+		})
+		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+		require.NoErrorf(t, err, "unable to get indexes")
+		require.Greater(t, len(indexes), 0, "no indexes found")
 		// check that the contents are the same
-		index1, err := os.ReadFile(indexFile)
+		index1, err := os.ReadFile(filepath.Join(repoDir, "an-etag.etag"))
 		require.NoError(t, err, "unable to read cache index file")
 		index2, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
 		require.NoError(t, err, "unable to read previous index file")
@@ -142,66 +166,91 @@ func TestGetRepositoryIndexes(t *testing.T) {
 	t.Run("cache hit etag match", func(t *testing.T) {
 		// it should succeed for a cache hit
 		tmpDir := t.TempDir()
-		// fill the cache
-		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
-		err := os.MkdirAll(repoDir, 0o755)
-		require.NoError(t, err, "unable to mkdir cache")
-		index, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
-		require.NoError(t, err, "unable to read index")
-		cacheIndexFile := filepath.Join(repoDir, indexFilename)
-		err = os.WriteFile(cacheIndexFile, index, 0o644) //nolint:gosec // we're writing a test file
-		require.NoError(t, err, "unable to write index")
 		testEtag := "test-etag"
-		err = os.WriteFile(filepath.Join(repoDir, indexFilename+".etag"), []byte(testEtag), 0o644) //nolint:gosec // we're writing a test file
-		require.NoError(t, err, "unable to write etag")
+
 		// get our APK struct
 		a := prepLayout(t, tmpDir)
+
 		a.SetClient(&http.Client{
-			// since the etag is unchanged, our final file should be the same as the original
-			// the one in testdata/alpine-317 is different
-			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
+			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
+		// Use the client to fill the cache.
 		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
+		// Capture the initial index.
+		index1 := indexes[0]
+
+		// Update the transport to serve the same etag, but different content to
+		// verify that we serve from the cache instead of the response.
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
+		})
+		indexes, err = a.getRepositoryIndexes(context.TODO(), false)
+		require.NoErrorf(t, err, "unable to get indexes")
+		require.Greater(t, len(indexes), 0, "no indexes found")
+		// Capture the resulting index.
+		index2 := indexes[0]
+
 		// check that the contents are the same
-		index1, err := os.ReadFile(cacheIndexFile)
-		require.NoError(t, err, "unable to read cache index file")
-		index2, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
-		require.NoError(t, err, "unable to read previous index file")
 		require.Equal(t, index1, index2, "index files do not match")
 	})
 	t.Run("cache hit etag miss", func(t *testing.T) {
-		// it should get the new one for a cache hit but etag mismatch
+		// it should succeed for a cache hit
 		tmpDir := t.TempDir()
-		// fill the cache
-		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
-		err := os.MkdirAll(repoDir, 0o755)
-		require.NoError(t, err, "unable to mkdir cache")
-		index, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
-		require.NoError(t, err, "unable to read index")
-		cacheIndexFile := filepath.Join(repoDir, indexFilename)
-		err = os.WriteFile(cacheIndexFile, index, 0o644) //nolint:gosec // we're writing a test file
-		require.NoError(t, err, "unable to write index")
 		testEtag := "test-etag"
-		err = os.WriteFile(filepath.Join(repoDir, indexFilename+".etag"), []byte(testEtag), 0o644) //nolint:gosec // we're writing a test file
-		require.NoError(t, err, "unable to write etag")
+
 		// get our APK struct
 		a := prepLayout(t, tmpDir)
+
 		a.SetClient(&http.Client{
-			// since the etag is unchanged, our final file should be the same as the original
-			// the one in testdata/alpine-317 is different
-			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
+			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
+		// Use the client to fill the cache.
 		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
+		// Capture the initial index.
+		index1 := indexes[0]
+
+		// Update the transport to serve a different etag and different content,
+		// to verify that when the etag changes we use the data from the
+		// response.
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "change"}}},
+		})
+		indexes, err = a.getRepositoryIndexes(context.TODO(), false)
+		require.NoErrorf(t, err, "unable to get indexes")
+		require.Greater(t, len(indexes), 0, "no indexes found")
+		// Capture the resulting index.
+		index2 := indexes[0]
+
 		// check that the contents are the same
-		index1, err := os.ReadFile(cacheIndexFile)
-		require.NoError(t, err, "unable to read cache index file")
-		index2, err := os.ReadFile(filepath.Join(testAlternatePkgDir, indexFilename))
-		require.NoError(t, err, "unable to read previous index file")
-		require.Equal(t, index1, index2, "index files do not match")
+		require.NotEqual(t, index1, index2, "index files do not match")
+	})
+	t.Run("test cache concurrency", func(t *testing.T) {
+		// Use the same temp directory for the cache.
+		tmpDir := t.TempDir()
+
+		eg := errgroup.Group{}
+		for i := 0; i < 100; i++ {
+			i := i
+			eg.Go(func() error {
+				a := prepLayout(t, tmpDir)
+				a.SetClient(&http.Client{
+					Transport: &testLocalTransport{
+						root:         testPrimaryPkgDir,
+						basenameOnly: true,
+						headers:      map[string][]string{http.CanonicalHeaderKey("etag"): {fmt.Sprint(i)}},
+					},
+				})
+				indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+				require.NoErrorf(t, err, "unable to get indexes")
+				require.Greater(t, len(indexes), 0, "no indexes found")
+				return nil
+			})
+		}
+		require.NoErrorf(t, eg.Wait(), "unable to get indexes")
 	})
 }
 
