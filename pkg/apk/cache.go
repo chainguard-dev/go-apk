@@ -51,7 +51,7 @@ type cacheTransport struct {
 }
 
 func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	rid := rand.Intn(10000)
+	rid := rand.Intn(10000) //nolint:gosec // we don't care about the quality of randomness here
 	// do we have the file in the cache?
 	if request.URL == nil {
 		return nil, fmt.Errorf("no URL in request")
@@ -69,22 +69,24 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 	// If an etag isn't required, then check the cache based on a simple
 	// filename-based naming scheme.
 	if !t.etagRequired {
+		logger.Printf("etag not required")
 		// Try to open the file in the cache, and if we hit an error then
 		// try to populate the file in the cache.
 		f, err := os.Open(cacheFile)
 		if err != nil {
+			logger.Printf("could not open cacheFile, going to retrieve and save")
 			return t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
 				// On the non-etag path, we simply name files based on the URL.
 				return cacheFile, nil
 			})
 		}
-		logger.Printf("cacheFile failed, returning 200")
+		logger.Printf("cacheFile found locally or retrieved, returning 200")
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       f,
 		}, nil
 	}
-	logger.Printf("etagfile found, checking remote via HEAD")
+	logger.Printf("etag required, checking remote via HEAD")
 	resp, err := t.wrapped.Head(request.URL.String())
 	if err != nil || resp.StatusCode != 200 {
 		logger.Printf("remote HEAD did not succeed, returning error %v", err)
@@ -94,13 +96,16 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 	if !ok {
 		// If the server doesn't return etags, and we require them,
 		// then do not cache.
+		logger.Printf("no etag retrieved, yet required, so not caching")
 		return t.wrapped.Do(request)
 	}
 	// We simulate content-based addressing with the etag values using an .etag
 	// file extension.
 	etagFile := filepath.Join(filepath.Dir(cacheFile), initialEtag+".etag")
+	logger.Printf("etag file is %s", etagFile)
 	f, err := os.Open(etagFile)
 	if err != nil {
+		logger.Printf("could not open etag file, trying to retrieve and save")
 		return t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
 			// On the etag path, use the etag from the actual response to
 			// compute the final file name.
@@ -111,7 +116,7 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 			return filepath.Join(filepath.Dir(cacheFile), finalEtag+".etag"), nil
 		})
 	}
-	logger.Printf("success, returning 200")
+	logger.Printf("have an etag matching the remote HEAD, so returning 200 from cache")
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       f,

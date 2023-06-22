@@ -15,6 +15,9 @@ package apk
 
 import (
 	"bytes"
+	"crypto/md5" //nolint:gosec // this is just for testing, md5 is good enough
+	"encoding/hex"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -49,14 +52,36 @@ func (t *testLocalTransport) RoundTrip(request *http.Request) (*http.Response, e
 	} else {
 		target = filepath.Join(t.root, request.URL.Path)
 	}
+	// we generate an etag from the md5 sum of the file contents, because it is faster and simpler
+	// and the sha256 guarantees do not matter to us
+	file, err := os.Open(target)
+	if err != nil {
+		return &http.Response{StatusCode: 404}, nil
+	}
+	defer file.Close()
+
+	hash := md5.New() //nolint:gosec // this is just for testing, md5 is good enough
+	if _, err := io.Copy(hash, file); err != nil {
+		return nil, fmt.Errorf("unable to calculate md5 sum of file %s: %w", target, err)
+	}
+	etag, err := hex.EncodeToString(hash.Sum(nil)), nil
+	if err != nil {
+		return nil, fmt.Errorf("unable to encode md5 sum of file %s: %w", target, err)
+	}
+
 	f, err := os.Open(target)
 	if err != nil {
 		return &http.Response{StatusCode: 404}, nil
 	}
+	headers := make(map[string][]string)
+	for k, v := range t.headers {
+		headers[k] = v
+	}
+	headers[http.CanonicalHeaderKey("etag")] = []string{etag}
 	return &http.Response{
 		StatusCode: 200,
 		Body:       f,
-		Header:     t.headers,
+		Header:     headers,
 	}, nil
 }
 

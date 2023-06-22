@@ -252,6 +252,26 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		}
 		require.NoErrorf(t, eg.Wait(), "unable to get indexes")
 	})
+	t.Run("cache miss network parallel should fill cache only once", func(t *testing.T) {
+		// we use a transport that can read from the network
+		// it should fail for a cache hit
+		tmpDir := t.TempDir()
+		var errg errgroup.Group
+		a := prepLayout(t, tmpDir)
+		// fill the cache
+
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
+		})
+		for i := 0; i < 10; i++ {
+			errg.Go(func() error {
+				_, err := a.getRepositoryIndexes(context.TODO(), false)
+				return err
+			})
+		}
+		err := errg.Wait()
+		require.NoErrorf(t, err, "unable to get indexes")
+	})
 }
 
 func testGetPackagesAndIndex() ([]*repository.RepositoryPackage, []*repository.RepositoryWithIndex) {
