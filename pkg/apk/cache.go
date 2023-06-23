@@ -56,54 +56,69 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 	if err != nil {
 		return nil, fmt.Errorf("invalid cache path based on URL: %w", err)
 	}
-	etagFile := etagFilename(cacheFile)
-	// see if the file is in the cachel if not, just return the wrapped client call
-	if _, err := os.Stat(cacheFile); err != nil {
-		return t.retrieveAndSaveFile(cacheFile, etagFile, request)
-	}
-	// we found the file, see if we can get an etag for it
-	// if no local etag, it means we are fine with the file itself without checking if it changed upstream
-	etag, err := os.ReadFile(etagFile)
-	if err != nil {
-		if t.etagRequired {
-			return t.retrieveAndSaveFile(cacheFile, etagFile, request)
-		}
-		// no etag, just return the file
+
+	// If an etag isn't required, then check the cache based on a simple
+	// filename-based naming scheme.
+	if !t.etagRequired {
+		// Try to open the file in the cache, and if we hit an error then
+		// try to populate the file in the cache.
 		f, err := os.Open(cacheFile)
 		if err != nil {
-			return &http.Response{StatusCode: 404}, nil
+			return t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
+				// On the non-etag path, we simply name files based on the URL.
+				return cacheFile, nil
+			})
 		}
 		return &http.Response{
-			StatusCode: 200,
+			StatusCode: http.StatusOK,
 			Body:       f,
 		}, nil
 	}
+
 	resp, err := t.wrapped.Head(request.URL.String())
 	if err != nil || resp.StatusCode != 200 {
 		return resp, err
 	}
-	remoteEtag, ok := resp.Header[http.CanonicalHeaderKey("etag")]
-	if !ok || len(remoteEtag) == 0 || remoteEtag[0] == "" {
-		return t.retrieveAndSaveFile(cacheFile, etagFile, request)
+	initialEtag, ok := etagFromResponse(resp)
+	if !ok {
+		// If the server doesn't return etags, and we require them,
+		// then do not cache.
+		return t.wrapped.Do(request)
 	}
-	// did not match, our file is out of date, replace
-	if string(etag) != remoteEtag[0] {
-		_ = os.Remove(cacheFile)
-		_ = os.Remove(etagFile)
-		return t.retrieveAndSaveFile(cacheFile, etagFile, request)
-	}
-	// it matched, so use our cache file
-	f, err := os.Open(cacheFile)
+	// We simulate content-based addressing with the etag values using an .etag
+	// file extension.
+	etagFile := filepath.Join(filepath.Dir(cacheFile), initialEtag+".etag")
+	f, err := os.Open(etagFile)
 	if err != nil {
-		return &http.Response{StatusCode: 404}, nil
+		return t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
+			// On the etag path, use the etag from the actual response to
+			// compute the final file name.
+			finalEtag, ok := etagFromResponse(resp)
+			if !ok {
+				return "", fmt.Errorf("GET response did not contain an etag, but HEAD returned %q", initialEtag)
+			}
+			return filepath.Join(filepath.Dir(cacheFile), finalEtag+".etag"), nil
+		})
 	}
 	return &http.Response{
-		StatusCode: 200,
+		StatusCode: http.StatusOK,
 		Body:       f,
 	}, nil
 }
 
-func (t *cacheTransport) retrieveAndSaveFile(cacheFile, etagFile string, request *http.Request) (*http.Response, error) {
+func etagFromResponse(resp *http.Response) (string, bool) {
+	remoteEtag, ok := resp.Header[http.CanonicalHeaderKey("etag")]
+	if !ok || len(remoteEtag) == 0 || remoteEtag[0] == "" {
+		return "", false
+	}
+	// When we get etags, they appear to be quoted.
+	etag := strings.Trim(remoteEtag[0], `"`)
+	return etag, etag != ""
+}
+
+type cachePlacer func(*http.Response) (string, error)
+
+func (t *cacheTransport) retrieveAndSaveFile(request *http.Request, cp cachePlacer) (*http.Response, error) {
 	if t.wrapped == nil {
 		return nil, fmt.Errorf("wrapped client is nil")
 	}
@@ -111,11 +126,20 @@ func (t *cacheTransport) retrieveAndSaveFile(cacheFile, etagFile string, request
 	if err != nil || resp.StatusCode != 200 {
 		return resp, err
 	}
-	// save the file
-	if err := os.MkdirAll(filepath.Dir(cacheFile), 0755); err != nil {
+
+	// Determine the file we will caching stuff in based on the URL/response
+	cacheFile, err := cp(resp)
+	if err != nil {
+		return nil, err
+	}
+	cacheDir := filepath.Dir(cacheFile)
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("unable to create cache directory: %w", err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(cacheFile), "temp-*.apk")
+
+	// Stream the request response to a temporary file within the final cache
+	// directory
+	tmp, err := os.CreateTemp(cacheDir, "*.tmp")
 	if err != nil {
 		return nil, fmt.Errorf("unable to create a temporary cache file: %w", err)
 	}
@@ -129,20 +153,13 @@ func (t *cacheTransport) retrieveAndSaveFile(cacheFile, etagFile string, request
 		return nil, err
 	}
 
-	// was there an etag?
-	etag := resp.Header.Get("etag")
-	if etag != "" {
-		if err := os.WriteFile(etagFile, []byte(etag), 0644); err != nil { //nolint:gosec // is ok for this file to be world-readable
-			return nil, fmt.Errorf("unable to write etag file: %w", err)
-		}
-	}
-
-	// Now that we have the file and (maybe) etag, atomically populate the cache
+	// Now that we have the file has been written, rename to atomically populate
+	// the cache
 	if err := os.Rename(tmp.Name(), cacheFile); err != nil {
 		return nil, fmt.Errorf("unable to populate cache: %v", err)
 	}
 
-	// return a handler to our file
+	// return a handle to our file
 	f2, err := os.Open(cacheFile)
 	if err != nil {
 		return nil, fmt.Errorf("unable to open cache file: %w", err)
@@ -176,8 +193,4 @@ func (t *cacheTransport) cachePathFromURL(u url.URL) (string, error) {
 		return "", fmt.Errorf("cache file %s is not within root %s", cacheFile, root)
 	}
 	return cacheFile, nil
-}
-
-func etagFilename(p string) string {
-	return p + ".etag"
 }
