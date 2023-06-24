@@ -289,7 +289,7 @@ func parseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint
 			if err != nil {
 				return nil, fmt.Errorf("cannot parse build time %s: %w", val, err)
 			}
-			pkg.BuildTime = time.Unix(i, 0)
+			pkg.BuildTime = time.Unix(i, 0).UTC()
 		case "i":
 			pkg.InstallIf = strings.Split(val, " ")
 		case "S":
