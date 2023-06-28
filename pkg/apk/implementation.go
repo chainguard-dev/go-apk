@@ -559,7 +559,6 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 		defer f.Close()
 		if _, err := io.Copy(f, res.Body); err != nil {
 			return fmt.Errorf("failed to write key file %s: %w", filename, err)
-
 		}
 	}
 	return nil
