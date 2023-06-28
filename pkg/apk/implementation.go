@@ -196,7 +196,7 @@ func (a *APK) ListInitFiles() []tar.Header {
 // Returns the list of files and directories and files installed and permissions,
 // unless those files will be included in the installed database, in which case they can
 // be retrieved via GetInstalled().
-func (a *APK) InitDB(ctx context.Context, versions ...string) error {
+func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
 	/*
 		equivalent of: "apk add --initdb --arch arch --root root"
 	*/
@@ -265,12 +265,14 @@ func (a *APK) InitDB(ctx context.Context, versions ...string) error {
 	// nothing to add to it; scripts.tar should be empty
 
 	// get the alpine-keys base keys for our usage
-	if err := a.fetchAlpineKeys(ctx, versions); err != nil {
-		var nokeysErr *NoKeysFoundError
-		if !errors.As(err, &nokeysErr) {
-			return fmt.Errorf("failed to fetch alpine-keys: %w", err)
+	if len(alpineVersions) > 0 {
+		if err := a.fetchAlpineKeys(ctx, alpineVersions); err != nil {
+			var nokeysErr *NoKeysFoundError
+			if !errors.As(err, &nokeysErr) {
+				return fmt.Errorf("failed to fetch alpine-keys: %w", err)
+			}
+			a.logger.Infof("ignoring missing keys: %s", err.Error())
 		}
-		a.logger.Infof("ignoring missing keys: %s", err.Error())
 	}
 
 	a.logger.Infof("finished initializing apk database")
@@ -495,7 +497,7 @@ func (e *NoKeysFoundError) Error() string {
 }
 
 // fetchAlpineKeys fetches the public keys for the repositories in the APK database.
-func (a *APK) fetchAlpineKeys(ctx context.Context, versions []string) error {
+func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) error {
 	u := alpineReleasesURL
 	client := a.client
 	if client == nil {
@@ -520,11 +522,6 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, versions []string) error {
 	var releases Releases
 	if err := json.Unmarshal(b, &releases); err != nil {
 		return fmt.Errorf("failed to unmarshal alpine releases: %w", err)
-	}
-	// what is the alpine version we use?
-	var alpineVersions = versions
-	if len(alpineVersions) == 0 {
-		alpineVersions = append(alpineVersions, releases.LatestStable)
 	}
 	var urls []string
 	// now just need to get the keys for the desired architecture and releases
@@ -562,6 +559,7 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, versions []string) error {
 		defer f.Close()
 		if _, err := io.Copy(f, res.Body); err != nil {
 			return fmt.Errorf("failed to write key file %s: %w", filename, err)
+
 		}
 	}
 	return nil
