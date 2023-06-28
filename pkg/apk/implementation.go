@@ -437,12 +437,6 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 
 	// to fix the world, we need to:
 	// 1. Get the apkIndexes for each repository for the target arch
-	if err := a.lock(); err != nil {
-		return fmt.Errorf("failed to lock: %w", err)
-	}
-	defer func() {
-		_ = a.unlock()
-	}()
 	allpkgs, conflicts, err := a.ResolveWorld(ctx)
 	if err != nil {
 		return fmt.Errorf("error getting package dependencies: %w", err)
