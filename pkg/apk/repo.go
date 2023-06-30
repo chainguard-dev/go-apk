@@ -19,11 +19,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/hashicorp/go-retryablehttp"
 	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
@@ -154,7 +154,7 @@ func (a *APK) getRepositoryIndexes(ctx context.Context, ignoreSignatures bool) (
 	}
 	httpClient := a.client
 	if httpClient == nil {
-		httpClient = &http.Client{}
+		httpClient = retryablehttp.NewClient().StandardClient()
 	}
 	if a.cache != nil {
 		httpClient = a.cache.client(httpClient, true)
