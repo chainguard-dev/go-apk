@@ -37,6 +37,7 @@ import (
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 	logger "github.com/chainguard-dev/go-apk/pkg/logger"
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 type APK struct {
@@ -363,7 +364,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 			case "https": //nolint:goconst
 				client := a.client
 				if client == nil {
-					client = &http.Client{}
+					client = retryablehttp.NewClient().StandardClient()
 				}
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, asURL.String(), nil)
 				if err != nil {
@@ -495,7 +496,7 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 	u := alpineReleasesURL
 	client := a.client
 	if client == nil {
-		client = &http.Client{}
+		client = retryablehttp.NewClient().StandardClient()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -594,7 +595,7 @@ func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPack
 	case "https":
 		client := a.client
 		if client == nil {
-			client = &http.Client{}
+			client = retryablehttp.NewClient().StandardClient()
 		}
 		if a.cache != nil {
 			client = a.cache.client(client, false)

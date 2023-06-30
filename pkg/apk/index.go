@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	sign "github.com/chainguard-dev/go-apk/pkg/signature"
+	"github.com/hashicorp/go-retryablehttp"
 	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.lsp.dev/uri"
 )
@@ -99,7 +100,7 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 		case "https":
 			client := opts.httpClient
 			if client == nil {
-				client = &http.Client{}
+				client = retryablehttp.NewClient().StandardClient()
 			}
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, asURL.String(), nil)
 			if err != nil {
