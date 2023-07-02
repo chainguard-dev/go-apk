@@ -9,12 +9,15 @@ package apk
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"go.opentelemetry.io/otel"
 )
 
 // The length of a gzip header
@@ -196,7 +199,10 @@ func (r *expandApkReader) EnableFastRead() {
 //
 // Returns an APKExpanded struct containing references to the file. You *must* call APKExpanded.Close()
 // when finished to clean up the various files.
-func ExpandApk(source io.Reader) (*APKExpanded, error) {
+func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "ExpandApk")
+	defer span.End()
+
 	dir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return nil, err

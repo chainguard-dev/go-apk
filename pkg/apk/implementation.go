@@ -32,6 +32,9 @@ import (
 
 	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
 	"go.lsp.dev/uri"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
@@ -324,6 +327,9 @@ func (a *APK) loadSystemKeyring(locations ...string) ([]string, error) {
 func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string) (err error) {
 	a.logger.Infof("initializing apk keyring")
 
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "InitKeyring")
+	defer span.End()
+
 	if err := a.fs.MkdirAll(DefaultKeyRingPath, 0o755); err != nil {
 		return fmt.Errorf("failed to make keys dir: %w", err)
 	}
@@ -405,6 +411,9 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*repository.RepositoryPackage, conflicts []string, err error) {
 	a.logger.Infof("determining desired apk world")
 
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "ResolveWorld")
+	defer span.End()
+
 	// to fix the world, we need to:
 	// 1. Get the apkIndexes for each repository for the target arch
 	indexes, err := a.getRepositoryIndexes(ctx, a.ignoreSignatures)
@@ -419,8 +428,8 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*repository.Reposit
 	if err != nil {
 		return toInstall, conflicts, fmt.Errorf("error getting world packages: %w", err)
 	}
-	resolver := NewPkgResolver(indexes)
-	toInstall, conflicts, err = resolver.GetPackagesWithDependencies(directPkgs)
+	resolver := NewPkgResolver(ctx, indexes)
+	toInstall, conflicts, err = resolver.GetPackagesWithDependencies(ctx, directPkgs)
 	if err != nil {
 		return
 	}
@@ -437,6 +446,9 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 		current default is: cache=false, updateCache=true, executeScripts=false
 	*/
 	a.logger.Infof("synchronizing with desired apk world")
+
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "FixateWorld")
+	defer span.End()
 
 	// to fix the world, we need to:
 	// 1. Get the apkIndexes for each repository for the target arch
@@ -493,6 +505,9 @@ func (e *NoKeysFoundError) Error() string {
 
 // fetchAlpineKeys fetches the public keys for the repositories in the APK database.
 func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) error {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "fetchAlpineKeys")
+	defer span.End()
+
 	u := alpineReleasesURL
 	client := a.client
 	if client == nil {
@@ -565,6 +580,9 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPackage, sourceDateEpoch *time.Time) error {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "installPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
+	defer span.End()
+
 	u := pkg.Url()
 
 	// Normalize the repo as a URI, so that local paths
@@ -618,12 +636,12 @@ func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPack
 	}
 
 	// install the apk file
-	expanded, err := ExpandApk(r)
+	expanded, err := ExpandApk(ctx, r)
 	if err != nil {
 		return fmt.Errorf("unable to expand apk for package %s: %w", pkg.Name, err)
 	}
 	defer expanded.Close()
-	installedFiles, err := a.installAPKFiles(expanded.PackageData, pkg.Origin, pkg.Replaces)
+	installedFiles, err := a.installAPKFiles(ctx, expanded.PackageData, pkg.Origin, pkg.Replaces)
 	if err != nil {
 		return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 	}

@@ -18,6 +18,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -56,7 +57,7 @@ func TestInstallAPKFiles(t *testing.T) {
 		}
 
 		r := testCreateTGZForPackage(entries)
-		headers, err := apk.installAPKFiles(r, "", "")
+		headers, err := apk.installAPKFiles(context.Background(), r, "", "")
 		require.NoError(t, err)
 
 		require.Equal(t, len(headers), len(entries))
@@ -113,7 +114,7 @@ func TestInstallAPKFiles(t *testing.T) {
 		}
 
 		r := testCreateTGZForPackage(entries)
-		headers, err := apk.installAPKFiles(r, "", "")
+		headers, err := apk.installAPKFiles(context.Background(), r, "", "")
 		require.NoError(t, err)
 
 		require.Equal(t, len(headers), len(entries))
@@ -163,7 +164,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r := testCreateTGZForPackage(entries)
-			headers, err := apk.installAPKFiles(r, pkg.Origin, "")
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, "")
 			require.NoError(t, err)
 			err = apk.addInstalledPackage(pkg, headers)
 			require.NoError(t, err)
@@ -177,7 +178,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r = testCreateTGZForPackage(entries)
-			_, err = apk.installAPKFiles(r, "second", "")
+			_, err = apk.installAPKFiles(context.Background(), r, "second", "")
 			require.Error(t, err, "some double-write error")
 
 			actual, err = src.ReadFile(overwriteFilename)
@@ -200,7 +201,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r := testCreateTGZForPackage(entries)
-			headers, err := apk.installAPKFiles(r, pkg.Origin, "")
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, "")
 			require.NoError(t, err)
 			err = apk.addInstalledPackage(pkg, headers)
 			require.NoError(t, err)
@@ -214,7 +215,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r = testCreateTGZForPackage(entries)
-			_, err = apk.installAPKFiles(r, "second", "first")
+			_, err = apk.installAPKFiles(context.Background(), r, "second", "first")
 			require.NoError(t, err)
 
 			actual, err = src.ReadFile(overwriteFilename)
@@ -236,7 +237,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			pkg := &repository.Package{Name: "first", Origin: "first"}
 
 			r := testCreateTGZForPackage(entries)
-			headers, err := apk.installAPKFiles(r, pkg.Origin, "")
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, "")
 			require.NoError(t, err)
 			err = apk.addInstalledPackage(pkg, headers)
 			require.NoError(t, err)
@@ -250,7 +251,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r = testCreateTGZForPackage(entries)
-			_, err = apk.installAPKFiles(r, pkg.Origin, "")
+			_, err = apk.installAPKFiles(context.Background(), r, pkg.Origin, "")
 			require.NoError(t, err)
 
 			actual, err = src.ReadFile(overwriteFilename)
@@ -272,7 +273,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r := testCreateTGZForPackage(entries)
-			headers, err := apk.installAPKFiles(r, pkg.Origin, "")
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, "")
 			require.NoError(t, err)
 			err = apk.addInstalledPackage(pkg, headers)
 			require.NoError(t, err)
@@ -286,7 +287,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r = testCreateTGZForPackage(entries)
-			_, err = apk.installAPKFiles(r, "second", "")
+			_, err = apk.installAPKFiles(context.Background(), r, "second", "")
 			require.NoError(t, err)
 
 			actual, err = src.ReadFile(overwriteFilename)

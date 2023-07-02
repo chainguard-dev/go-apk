@@ -33,6 +33,7 @@ import (
 	"github.com/hashicorp/go-retryablehttp"
 	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.lsp.dev/uri"
+	"go.opentelemetry.io/otel"
 )
 
 var signatureFileRegex = regexp.MustCompile(`^\.SIGN\.RSA\.(.*\.rsa\.pub)$`)
@@ -47,6 +48,9 @@ func IndexURL(repo, arch string) string {
 // The key-value pairs in the map for `keys` are the name of the key and the contents of the key.
 // The name is just indicative. If it finds a match, it will use it. Else, it will try all keys.
 func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][]byte, arch string, options ...IndexOption) (indexes []NamedIndex, err error) { //nolint:gocyclo
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "GetRepositoryIndexes")
+	defer span.End()
+
 	opts := &indexOpts{}
 	for _, opt := range options {
 		opt(opts)
