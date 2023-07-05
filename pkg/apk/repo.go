@@ -25,6 +25,7 @@ import (
 
 	"github.com/hashicorp/go-retryablehttp"
 	"gitlab.alpinelinux.org/alpine/go/repository"
+	"go.opentelemetry.io/otel"
 )
 
 // NamedIndex an index that contains all of its packages,
@@ -118,6 +119,9 @@ func (a *APK) GetRepositories() (repos []string, err error) {
 // getRepositoryIndexes returns the indexes for the repositories in the specified root.
 // The signatures for each index are verified unless ignoreSignatures is set to true.
 func (a *APK) getRepositoryIndexes(ctx context.Context, ignoreSignatures bool) ([]NamedIndex, error) {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "getRepositoryIndexes")
+	defer span.End()
+
 	// get the repository URLs
 	repos, err := a.GetRepositories()
 	if err != nil {
@@ -180,7 +184,10 @@ type PkgResolver struct {
 
 // NewPkgResolver creates a new pkgResolver from a list of indexes.
 // The indexes are anything that implements NamedIndex.
-func NewPkgResolver(indexes []NamedIndex) *PkgResolver {
+func NewPkgResolver(ctx context.Context, indexes []NamedIndex) *PkgResolver {
+	_, span := otel.Tracer("go-apk").Start(ctx, "NewPkgResolver")
+	defer span.End()
+
 	var (
 		pkgNameMap     = map[string][]*repositoryPackage{}
 		pkgProvidesMap = map[string][]*repositoryPackage{}
@@ -232,7 +239,10 @@ func NewPkgResolver(indexes []NamedIndex) *PkgResolver {
 
 // GetPackagesWithDependencies get all of the dependencies for the given packages based on the
 // indexes. Does not filter for installed already or not.
-func (p *PkgResolver) GetPackagesWithDependencies(packages []string) (toInstall []*repository.RepositoryPackage, conflicts []string, err error) {
+func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages []string) (toInstall []*repository.RepositoryPackage, conflicts []string, err error) {
+	_, span := otel.Tracer("go-apk").Start(ctx, "GetPackageWithDependencies")
+	defer span.End()
+
 	var (
 		dependenciesMap = map[string]*repository.RepositoryPackage{}
 		installTracked  = map[string]*repository.RepositoryPackage{}

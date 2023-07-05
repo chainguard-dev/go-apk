@@ -25,6 +25,7 @@ import (
 	"os"
 	"syscall"
 
+	"go.opentelemetry.io/otel"
 	gzip "golang.org/x/build/pargzip"
 	"golang.org/x/sys/unix"
 
@@ -278,6 +279,9 @@ func (c *Context) WriteArchive(dst io.Writer, src fs.FS) error {
 // To override permissions, set the OverridePerms when creating the Context.
 // If you need to get multiple filesystems, merge them prior to calling WriteArchive.
 func (c *Context) WriteTargz(ctx context.Context, dst io.Writer, src fs.FS) error {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "WriteTargz")
+	defer span.End()
+
 	gzw := gzip.NewWriter(dst)
 	defer gzw.Close()
 
@@ -288,6 +292,9 @@ func (c *Context) WriteTargz(ctx context.Context, dst io.Writer, src fs.FS) erro
 // To override permissions, set the OverridePerms when creating the Context.
 // If you need to get multiple filesystems, merge them prior to calling WriteArchive.
 func (c *Context) WriteTar(ctx context.Context, dst io.Writer, src fs.FS) error {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "WriteTar")
+	defer span.End()
+
 	tw := tar.NewWriter(dst)
 	if !c.SkipClose {
 		defer tw.Close()
