@@ -36,22 +36,59 @@ type APKExpanded struct {
 	// The temporary parent directory containing all exploded .tar/.tar.gz contents
 	tempDir string
 
-	// The package signature (a.k.a. ".SIGN...") in tar.gz format
-	Signature []byte
+	// The package signature filename (a.k.a. ".SIGN...") in tar.gz format
+	SignatureFile string
 
-	// the control data (a.k.a. ".PKGINFO") in tar.gz format
-	ControlData []byte
+	// The control data filename (a.k.a. ".PKGINFO") in tar.gz format
+	ControlFile string
 
-	// A stream reader to the contents in tar.gz format
-	PackageData io.ReadCloser
+	// The package data filename in tar.gz format
+	PackageFile string
+}
+
+func (a *APKExpanded) APK() (io.ReadCloser, error) {
+	rs := []io.Reader{}
+	cs := []io.Closer{}
+
+	for _, fn := range []string{a.SignatureFile, a.ControlFile, a.PackageFile} {
+		if fn != "" {
+			f, err := os.Open(fn)
+			if err != nil {
+				return nil, err
+			}
+			rs = append(rs, f)
+			cs = append(cs, f)
+		}
+	}
+
+	return &multiReadCloser{
+		r:       io.MultiReader(rs...),
+		closers: cs,
+	}, nil
+}
+
+type multiReadCloser struct {
+	r       io.Reader
+	closers []io.Closer
+}
+
+func (m *multiReadCloser) Read(p []byte) (int, error) {
+	return m.r.Read(p)
+}
+
+func (m *multiReadCloser) Close() error {
+	errs := make([]error, len(m.closers))
+	for i, closer := range m.closers {
+		errs[i] = closer.Close()
+	}
+	return errors.Join(errs...)
 }
 
 func (a *APKExpanded) Close() error {
-	if a.PackageData != nil {
-		if err := a.PackageData.Close(); err != nil {
-			return fmt.Errorf("APKExpanded.Close error 1: %v", err)
-		}
+	if a.tempDir == "" {
+		return nil
 	}
+
 	return os.RemoveAll(a.tempDir)
 }
 
@@ -207,6 +244,7 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	sw, err := newExpandApkWriter(dir, "stream", "tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("expandApk error 1: %w", err)
@@ -324,29 +362,15 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 		return nil, fmt.Errorf("invalid number of tar streams: %d", numGzipStreams)
 	}
 
-	controlData, err := os.ReadFile(gzipStreams[controlDataIndex])
-	if err != nil {
-		return nil, fmt.Errorf("unable to read control data: %w", err)
-	}
-
-	packageData, err := os.Open(gzipStreams[controlDataIndex+1])
-	if err != nil {
-		return nil, fmt.Errorf("could not open package data file %s for reading: %w", gzipStreams[controlDataIndex+1], err)
-	}
-
 	expanded := APKExpanded{
 		tempDir:     dir,
 		Signed:      signed,
 		Size:        totalSize,
-		ControlData: controlData,
-		PackageData: packageData,
+		ControlFile: gzipStreams[controlDataIndex],
+		PackageFile: gzipStreams[controlDataIndex+1],
 	}
 	if signed {
-		b, err := os.ReadFile(gzipStreams[0])
-		if err != nil {
-			return nil, fmt.Errorf("could not read signature file %s: %w", gzipStreams[0], err)
-		}
-		expanded.Signature = b
+		expanded.SignatureFile = gzipStreams[0]
 	}
 
 	return &expanded, nil

@@ -16,8 +16,11 @@ package apk
 
 import (
 	"archive/tar"
-	"bytes"
 	"context"
+	"crypto/sha1" //nolint:gosec // this is what apk tools is using
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -465,11 +468,6 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 	//     d. Update /lib/apk/db/scripts.tar
 	//     d. Update /lib/apk/db/triggers
 	//     e. Update the installed file
-	dir, err := os.MkdirTemp("", "go-apk")
-	if err != nil {
-		return fmt.Errorf("could not make temp dir: %w", err)
-	}
-	defer os.RemoveAll(dir)
 	for _, pkg := range conflicts {
 		isInstalled, err := a.isInstalledPackage(pkg)
 		if err != nil {
@@ -535,13 +533,7 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 				return nil
 			}
 
-			rc, err := a.fetchPackage(gctx, pkg)
-			if err != nil {
-				return fmt.Errorf("fetching package %q: %w", pkg.Name, err)
-			}
-			defer rc.Close()
-
-			exp, err := ExpandApk(gctx, rc)
+			exp, err := a.expandPackage(gctx, pkg)
 			if err != nil {
 				return fmt.Errorf("expanding %s: %w", pkg.Name, err)
 			}
@@ -640,6 +632,182 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 	return nil
 }
 
+func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackage, exp *APKExpanded) (*APKExpanded, error) {
+	_, span := otel.Tracer("go-apk").Start(ctx, "cachePackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
+	defer span.End()
+
+	// Rename exp's temp files to content-addressable identifiers in the cache.
+	cacheDir, err := cacheDirForPackage(a.cache.dir, pkg)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return nil, fmt.Errorf("unable to create cache directory %q: %w", cacheDir, err)
+	}
+
+	// Compute the sha1 of the control section.
+	ctl, err := os.Open(exp.ControlFile)
+	if err != nil {
+		return nil, fmt.Errorf("opening %q: %w", exp.ControlFile, err)
+	}
+	defer ctl.Close()
+
+	h1 := sha1.New() //nolint:gosec // this is what apk tools is using
+	if _, err := io.Copy(h1, ctl); err != nil {
+		return nil, fmt.Errorf("computing control section sha1: %w", err)
+	}
+
+	ctlHex := hex.EncodeToString(h1.Sum(nil))
+	ctlDst := filepath.Join(cacheDir, ctlHex+".ctl.tar.gz")
+
+	if err := os.Rename(exp.ControlFile, ctlDst); err != nil {
+		return nil, fmt.Errorf("renaming control file: %w", err)
+	}
+
+	exp.ControlFile = ctlDst
+
+	if exp.SignatureFile != "" {
+		sigDst := filepath.Join(cacheDir, ctlHex+".sig.tar.gz")
+
+		if err := os.Rename(exp.SignatureFile, sigDst); err != nil {
+			return nil, fmt.Errorf("renaming control file: %w", err)
+		}
+
+		exp.SignatureFile = sigDst
+	}
+
+	// Compute the sha256 of the data section.
+	dat, err := os.Open(exp.PackageFile)
+	if err != nil {
+		return nil, fmt.Errorf("opening %q: %w", exp.PackageFile, err)
+	}
+	defer dat.Close()
+
+	h2 := sha256.New()
+	if _, err := io.Copy(h2, dat); err != nil {
+		return nil, fmt.Errorf("computing data section sha256: %w", err)
+	}
+
+	datHex := hex.EncodeToString(h2.Sum(nil))
+	datDst := filepath.Join(cacheDir, datHex+".dat.tar.gz")
+
+	if err := os.Rename(exp.PackageFile, datDst); err != nil {
+		return nil, fmt.Errorf("renaming control file: %w", err)
+	}
+
+	exp.PackageFile = datDst
+
+	return exp, nil
+}
+
+func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPackage) (*APKExpanded, error) {
+	_, span := otel.Tracer("go-apk").Start(ctx, "cachedPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
+	defer span.End()
+
+	chk := pkg.ChecksumString()
+	if !strings.HasPrefix(chk, "Q1") {
+		return nil, fmt.Errorf("unexpected checksum: %q", chk)
+	}
+
+	checksum, err := base64.StdEncoding.DecodeString(chk[2:])
+	if err != nil {
+		return nil, err
+	}
+
+	pkgHexSum := hex.EncodeToString(checksum)
+
+	cacheDir, err := cacheDirForPackage(a.cache.dir, pkg)
+	if err != nil {
+		return nil, err
+	}
+
+	exp := APKExpanded{}
+
+	ctl := filepath.Join(cacheDir, pkgHexSum+".ctl.tar.gz")
+	if _, err := os.Stat(ctl); err != nil {
+		return nil, err
+	}
+	exp.ControlFile = ctl
+
+	sig := filepath.Join(cacheDir, pkgHexSum+".sig.tar.gz")
+	if _, err := os.Stat(sig); err == nil {
+		exp.SignatureFile = sig
+		exp.Signed = true
+	}
+
+	f, err := os.Open(ctl)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	datahash, err := a.datahash(f)
+	if err != nil {
+		return nil, fmt.Errorf("datahash for %s: %w", pkg.Name, err)
+	}
+
+	dat := filepath.Join(cacheDir, datahash+".dat.tar.gz")
+	if _, err := os.Stat(dat); err != nil {
+		return nil, err
+	}
+	exp.PackageFile = dat
+
+	return &exp, nil
+}
+
+func (a *APK) expandPackage(ctx context.Context, pkg *repository.RepositoryPackage) (*APKExpanded, error) {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "expandPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
+	defer span.End()
+
+	if a.cache != nil {
+		exp, err := a.cachedPackage(ctx, pkg)
+		if err == nil {
+			a.logger.Debugf("cache hit (%s)", pkg.Name)
+			return exp, nil
+		}
+
+		a.logger.Debugf("cache miss (%s): %v", pkg.Name, err)
+	}
+
+	rc, err := a.fetchPackage(ctx, pkg)
+	if err != nil {
+		return nil, fmt.Errorf("fetching package %q: %w", pkg.Name, err)
+	}
+	defer rc.Close()
+
+	exp, err := ExpandApk(ctx, rc)
+	if err != nil {
+		return nil, fmt.Errorf("expanding %s: %w", pkg.Name, err)
+	}
+
+	// If we don't have a cache, we're done.
+	if a.cache == nil {
+		return exp, nil
+	}
+
+	return a.cachePackage(ctx, pkg, exp)
+}
+
+func packageAsURI(pkg *repository.RepositoryPackage) (uri.URI, error) {
+	u := pkg.Url()
+
+	if strings.HasPrefix(u, "https://") {
+		return uri.Parse(u)
+	}
+
+	return uri.New(u), nil
+}
+
+func packageAsURL(pkg *repository.RepositoryPackage) (*url.URL, error) {
+	asURI, err := packageAsURI(pkg)
+	if err != nil {
+		return nil, err
+	}
+
+	return url.Parse(string(asURI))
+}
+
 func (a *APK) fetchPackage(ctx context.Context, pkg *repository.RepositoryPackage) (io.ReadCloser, error) {
 	a.logger.Debugf("fetching %s (%s)", pkg.Name, pkg.Version)
 
@@ -651,15 +819,9 @@ func (a *APK) fetchPackage(ctx context.Context, pkg *repository.RepositoryPackag
 	// Normalize the repo as a URI, so that local paths
 	// are translated into file:// URLs, allowing them to be parsed
 	// into a url.URL{}.
-	var asURI uri.URI
-	if strings.HasPrefix(u, "https://") {
-		asURI, _ = uri.Parse(u)
-	} else {
-		asURI = uri.New(u)
-	}
-	asURL, err := url.Parse(string(asURI))
+	asURL, err := packageAsURL(pkg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse package as URI: %w", err)
+		return nil, fmt.Errorf("failed to parse package as URL: %w", err)
 	}
 
 	switch asURL.Scheme {
@@ -704,13 +866,21 @@ func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPack
 
 	defer expanded.Close()
 
-	installedFiles, err := a.installAPKFiles(ctx, expanded.PackageData, pkg.Origin, pkg.Replaces)
+	packageData, err := os.Open(expanded.PackageFile)
+	if err != nil {
+		return fmt.Errorf("opening package file %q: %w", expanded.PackageFile, err)
+	}
+
+	installedFiles, err := a.installAPKFiles(ctx, packageData, pkg.Origin, pkg.Replaces)
 	if err != nil {
 		return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 	}
 
 	// update the scripts.tar
-	controlData := bytes.NewReader(expanded.ControlData)
+	controlData, err := os.Open(expanded.ControlFile)
+	if err != nil {
+		return fmt.Errorf("opening control file %q: %w", expanded.ControlFile, err)
+	}
 
 	if err := a.updateScriptsTar(pkg.Package, controlData, sourceDateEpoch); err != nil {
 		return fmt.Errorf("unable to update scripts.tar for pkg %s: %w", pkg.Name, err)
@@ -729,6 +899,19 @@ func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPack
 		return fmt.Errorf("unable to update installed file for pkg %s: %w", pkg.Name, err)
 	}
 	return nil
+}
+
+func (a *APK) datahash(controlTarGz io.Reader) (string, error) {
+	values, err := a.controlValue(controlTarGz, "datahash")
+	if err != nil {
+		return "", fmt.Errorf("reading datahash from control: %w", err)
+	}
+
+	if len(values) != 1 {
+		return "", fmt.Errorf("saw %d datahash values", len(values))
+	}
+
+	return values[0], nil
 }
 
 func packageRefs(pkgs []*repository.RepositoryPackage) []string {

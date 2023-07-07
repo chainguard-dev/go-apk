@@ -157,7 +157,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// check that the contents are the same
-		index1, err := os.ReadFile(filepath.Join(repoDir, "an-etag.etag"))
+		index1, err := os.ReadFile(filepath.Join(repoDir, "APKINDEX", "an-etag.tar.gz"))
 		require.NoError(t, err, "unable to read cache index file")
 		index2, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, indexFilename))
 		require.NoError(t, err, "unable to read previous index file")

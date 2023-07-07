@@ -17,6 +17,7 @@ package apk
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -48,9 +49,10 @@ QwIDAQAB
 
 var (
 	testPkg = repository.Package{
-		Name:    "alpine-baselayout",
-		Version: "3.2.0-r23",
-		Arch:    testArch,
+		Name:     "alpine-baselayout",
+		Version:  "3.2.0-r23",
+		Arch:     testArch,
+		Checksum: []byte{44, 186, 182, 168, 51, 107, 75, 250, 145, 158, 28, 80, 222, 27, 24, 254, 193, 219, 66, 119},
 	}
 	testPkgFilename = fmt.Sprintf("%s-%s.apk", testPkg.Name, testPkg.Version)
 )
@@ -318,18 +320,27 @@ func TestFetchPackage(t *testing.T) {
 		require.NoError(t, err, "unable to mkdir cache")
 
 		cacheApkFile := filepath.Join(repoDir, testPkgFilename)
+		cacheApkDir := strings.TrimSuffix(cacheApkFile, ".apk")
 
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
-		_, err = a.fetchPackage(ctx, pkg)
+
+		_, err = a.expandPackage(ctx, pkg)
 		require.NoErrorf(t, err, "unable to install pkg")
 		// check that the package file is in place
-		_, err = os.Stat(cacheApkFile)
+		_, err = os.Stat(cacheApkDir)
 		require.NoError(t, err, "apk file not found in cache")
 		// check that the contents are the same
-		apk1, err := os.ReadFile(cacheApkFile)
+		exp, err := a.cachedPackage(ctx, pkg)
 		require.NoError(t, err, "unable to read cache apk file")
+		f, err := exp.APK()
+		require.NoError(t, err, "unable to read cached files as apk")
+		defer f.Close()
+
+		apk1, err := io.ReadAll(f)
+		require.NoError(t, err, "unable to read cached apk bytes")
+
 		apk2, err := os.ReadFile(filepath.Join(testPrimaryPkgDir, testPkgFilename))
 		require.NoError(t, err, "unable to read previous apk file")
 		require.Equal(t, apk1, apk2, "apk files do not match")
