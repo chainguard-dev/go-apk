@@ -21,6 +21,7 @@ import (
 	"context"
 	"crypto/sha1" //nolint:gosec // this is what apk tools is using
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -131,29 +132,41 @@ func (a *APK) installAPKFiles(ctx context.Context, gzipIn io.Reader, origin, rep
 			}
 
 		case tar.TypeReg:
-			// we need to calculate the checksum of the file, and then pass it to the writeOneFile,
-			// so we save it to a tempdir and then remove it
-			f, err := os.CreateTemp(tmpDir, "apk-file")
+			checksum, err := checksumFromHeader(header)
 			if err != nil {
-				return nil, fmt.Errorf("error creating temporary file: %w", err)
+				return nil, err
 			}
 
 			// we need to calculate the checksum of the file while reading it
 			w := sha1.New() //nolint:gosec // this is what apk tools is using
 			tee := io.TeeReader(tr, w)
-			if _, err := io.Copy(f, tee); err != nil {
-				return nil, fmt.Errorf("error copying file %s: %w", header.Name, err)
-			}
-			offset, err := f.Seek(0, io.SeekStart)
-			if err != nil {
-				return nil, fmt.Errorf("error seeking to start of temp file for %s: %w", header.Name, err)
-			}
-			if offset != 0 {
-				return nil, fmt.Errorf("error seeking to start of temp file for %s: offset is %d", header.Name, offset)
-			}
-			checksum := w.Sum(nil)
 
-			if err := a.writeOneFile(header, f, false); err != nil {
+			r := tee
+
+			if checksum == nil {
+				// we need to calculate the checksum of the file, and then pass it to the writeOneFile,
+				// so we save it to a tempdir and then remove it
+				f, err := os.CreateTemp(tmpDir, "apk-file")
+				if err != nil {
+					return nil, fmt.Errorf("error creating temporary file: %w", err)
+				}
+
+				if _, err := io.Copy(f, tee); err != nil {
+					return nil, fmt.Errorf("error copying file %s: %w", header.Name, err)
+				}
+				offset, err := f.Seek(0, io.SeekStart)
+				if err != nil {
+					return nil, fmt.Errorf("error seeking to start of temp file for %s: %w", header.Name, err)
+				}
+				if offset != 0 {
+					return nil, fmt.Errorf("error seeking to start of temp file for %s: offset is %d", header.Name, offset)
+				}
+				checksum = w.Sum(nil)
+
+				r = f
+			}
+
+			if err := a.writeOneFile(header, r, false); err != nil {
 				// if the error is something other than the file exists, return the error
 				var fileExistsError FileExistsError
 				if !errors.As(err, &fileExistsError) || origin == "" {
@@ -197,10 +210,16 @@ func (a *APK) installAPKFiles(ctx context.Context, gzipIn io.Reader, origin, rep
 				// it was found in a package with the same origin, so just overwrite
 
 				// if we get here, it had the same origin so even if different, we are allowed to overwrite the file
-				if err := a.writeOneFile(header, f, true); err != nil {
+				if err := a.writeOneFile(header, r, true); err != nil {
 					return nil, err
 				}
 			}
+
+			// TODO: Move individual file checksum verification into ExpandAPK so we do it just once per APK.
+			if want, got := checksum, w.Sum(nil); !bytes.Equal(want, got) {
+				return nil, fmt.Errorf("checksum mismatch: header was %x, computed %x", want, got)
+			}
+
 			// we need to save this somewhere. The output expects []tar.Header, so we need to override that.
 			// Reusing a field should be good enough, provided that we know it is not getting in the way of
 			// anything downstream. Since we know it is not, this is good enough.
@@ -242,4 +261,36 @@ func (a *APK) installAPKFiles(ctx context.Context, gzipIn io.Reader, origin, rep
 	}
 
 	return files, nil
+}
+
+func checksumFromHeader(header *tar.Header) ([]byte, error) {
+	pax := header.PAXRecords
+	if pax == nil {
+		return nil, nil
+	}
+
+	hexsum, ok := pax[paxRecordsChecksumKey]
+	if !ok {
+		return nil, nil
+	}
+
+	if strings.HasPrefix(hexsum, "Q1") {
+		// This is nonstandard but something we did at one point, handle it.
+		// In other contexts, this Q1 prefix means "this is sha1 not md5".
+		b64 := strings.TrimPrefix(hexsum, "Q1")
+
+		checksum, err := base64.StdEncoding.DecodeString(b64)
+		if err != nil {
+			return nil, fmt.Errorf("decoding base64 checksum from header for %q: %w", header.Name, err)
+		}
+
+		return checksum, nil
+	}
+
+	checksum, err := hex.DecodeString(hexsum)
+	if err != nil {
+		return nil, fmt.Errorf("decoding hex checksum from header for %q: %w", header.Name, err)
+	}
+
+	return checksum, nil
 }
