@@ -152,7 +152,7 @@ func (a *APK) SetClient(client *http.Client) {
 
 // ListInitFiles list the files that are installed during the InitDB phase.
 func (a *APK) ListInitFiles() []tar.Header {
-	var headers = make([]tar.Header, 0, 20)
+	headers := make([]tar.Header, 0, 20)
 
 	// additionalFiles are files we need but can only be resolved in the context of
 	// this func, e.g. we need the architecture
@@ -350,18 +350,19 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 		eg.Go(func() error {
 			a.logger.Debugf("installing key %v", element)
 
-			// Normalize the element as a URI, so that local paths
-			// are translated into file:// URLs, allowing them to be parsed
-			// into a url.URL{}.
-			var asURI uri.URI
+			var asURL *url.URL
 			if strings.HasPrefix(element, "https://") {
-				asURI, _ = uri.Parse(element)
+				asURL, err = url.Parse(element)
+				if err != nil {
+					return fmt.Errorf("failed to parse key as URI: %w", err)
+				}
 			} else {
-				asURI = uri.New(element)
-			}
-			asURL, err := url.Parse(string(asURI))
-			if err != nil {
-				return fmt.Errorf("failed to parse key as URI: %w", err)
+				// Attempt to parse non-https elements into URI's so they are translated into
+				// file:// URLs allowing them to parse into a url.URL{}
+				asURL, err = url.Parse(string(uri.New(element)))
+				if err != nil {
+					return fmt.Errorf("failed to parse key as URI: %w", err)
+				}
 			}
 
 			var data []byte
@@ -380,6 +381,13 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 				if err != nil {
 					return err
 				}
+				// if the URL contains HTTP Basic Auth credentials, add them to the request
+				if asURL.User != nil {
+					user := asURL.User.Username()
+					pass, _ := asURL.User.Password()
+					req.SetBasicAuth(user, pass)
+				}
+
 				resp, err := client.Do(req)
 				if err != nil {
 					return fmt.Errorf("failed to fetch apk key: %w", err)
@@ -387,7 +395,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 				defer resp.Body.Close()
 
 				if resp.StatusCode < 200 || resp.StatusCode > 299 {
-					return errors.New("failed to fetch apk key: http response indicated error")
+					return fmt.Errorf("failed to fetch apk key: http response indicated error code: %d", resp.StatusCode)
 				}
 
 				data, err = io.ReadAll(resp.Body)
@@ -642,7 +650,7 @@ func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackag
 		return nil, err
 	}
 
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("unable to create cache directory %q: %w", cacheDir, err)
 	}
 
