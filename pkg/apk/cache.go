@@ -22,6 +22,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
 )
 
 // cache
@@ -52,23 +54,21 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 	if request.URL == nil {
 		return nil, fmt.Errorf("no URL in request")
 	}
-	cacheFile, err := t.cachePathFromURL(*request.URL)
+	cacheFile, err := cachePathFromURL(t.root, *request.URL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid cache path based on URL: %w", err)
 	}
 
-	// If an etag isn't required, then check the cache based on a simple
-	// filename-based naming scheme.
 	if !t.etagRequired {
-		// Try to open the file in the cache, and if we hit an error then
-		// try to populate the file in the cache.
+		// We don't cache the response for these because they get cached later in cachePackage.
+
+		// Try to open the file in the cache.
+		// If we hit an error, just send the request.
 		f, err := os.Open(cacheFile)
 		if err != nil {
-			return t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
-				// On the non-etag path, we simply name files based on the URL.
-				return cacheFile, nil
-			})
+			return t.wrapped.Do(request)
 		}
+
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       f,
@@ -87,7 +87,7 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 	}
 	// We simulate content-based addressing with the etag values using an .etag
 	// file extension.
-	etagFile := filepath.Join(filepath.Dir(cacheFile), initialEtag+".etag")
+	etagFile := cacheFileFromEtag(cacheFile, initialEtag)
 	f, err := os.Open(etagFile)
 	if err != nil {
 		return t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
@@ -97,13 +97,27 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 			if !ok {
 				return "", fmt.Errorf("GET response did not contain an etag, but HEAD returned %q", initialEtag)
 			}
-			return filepath.Join(filepath.Dir(cacheFile), finalEtag+".etag"), nil
+
+			return cacheFileFromEtag(cacheFile, finalEtag), nil
 		})
 	}
 	return &http.Response{
 		StatusCode: http.StatusOK,
 		Body:       f,
 	}, nil
+}
+
+func cacheFileFromEtag(cacheFile, etag string) string {
+	cacheDir := filepath.Dir(cacheFile)
+	ext := ".etag"
+
+	// Keep all the index files under APKINDEX/ with appropriate file extension.
+	if strings.HasSuffix(cacheFile, "APKINDEX.tar.gz") {
+		cacheDir = filepath.Join(cacheDir, "APKINDEX")
+		ext = ".tar.gz"
+	}
+
+	return filepath.Join(cacheDir, etag+ext)
 }
 
 func etagFromResponse(resp *http.Response) (string, bool) {
@@ -168,8 +182,26 @@ func (t *cacheTransport) retrieveAndSaveFile(request *http.Request, cp cachePlac
 	return resp, nil
 }
 
+func cacheDirForPackage(root string, pkg *repository.RepositoryPackage) (string, error) {
+	u, err := packageAsURL(pkg)
+	if err != nil {
+		return "", err
+	}
+
+	p, err := cachePathFromURL(root, *u)
+	if err != nil {
+		return "", err
+	}
+
+	if ext := filepath.Ext(p); ext != ".apk" {
+		return "", fmt.Errorf("unexpected ext (%s) to cache dir: %q", ext, p)
+	}
+
+	return strings.TrimSuffix(p, ".apk"), nil
+}
+
 // cachePathFromURL given a URL, figure out what the cache path would be
-func (t *cacheTransport) cachePathFromURL(u url.URL) (string, error) {
+func cachePathFromURL(root string, u url.URL) (string, error) {
 	// the last two levels are what we append. For example https://example.com/foo/bar/x86_64/baz.apk
 	// means we want to append x86_64/baz.apk to our cache root
 	u2 := u
@@ -185,12 +217,12 @@ func (t *cacheTransport) cachePathFromURL(u url.URL) (string, error) {
 
 	// url encode it so it can be a single directory
 	repoDir = url.QueryEscape(u2.String())
-	cacheFile := filepath.Join(t.root, repoDir, dir, filename)
-	// validate it is within t.root
+	cacheFile := filepath.Join(root, repoDir, dir, filename)
+	// validate it is within root
 	cacheFile = filepath.Clean(cacheFile)
-	root := filepath.Clean(t.root)
-	if !strings.HasPrefix(cacheFile, root) {
-		return "", fmt.Errorf("cache file %s is not within root %s", cacheFile, root)
+	cleanroot := filepath.Clean(root)
+	if !strings.HasPrefix(cacheFile, cleanroot) {
+		return "", fmt.Errorf("cache file %s is not within root %s", cacheFile, cleanroot)
 	}
 	return cacheFile, nil
 }

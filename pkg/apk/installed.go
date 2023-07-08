@@ -171,27 +171,23 @@ func (a *APK) readScriptsTar() (io.ReadCloser, error) {
 	return a.fs.Open(scriptsFilePath)
 }
 
-// updateTriggers insert the triggers into the triggers file
-func (a *APK) updateTriggers(pkg *repository.Package, controlTarGz io.Reader) error {
+// TODO: We should probably parse control section on the first pass and reuse it.
+func (a *APK) controlValue(controlTarGz io.Reader, want string) ([]string, error) {
 	gz, err := gzip.NewReader(controlTarGz)
 	if err != nil {
-		return fmt.Errorf("unable to gunzip control tar file: %w", err)
+		return nil, fmt.Errorf("unable to gunzip control tar file: %w", err)
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
 
-	triggers, err := a.fs.OpenFile(triggersFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		return fmt.Errorf("unable to open triggers file %s: %w", triggersFilePath, err)
-	}
-	defer triggers.Close()
+	values := []string{}
 	for {
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		// ignore .PKGINFO as it is not a script
@@ -201,7 +197,7 @@ func (a *APK) updateTriggers(pkg *repository.Package, controlTarGz io.Reader) er
 
 		b, err := io.ReadAll(tr)
 		if err != nil {
-			return fmt.Errorf("unable to read .PKGINFO from control tar.gz file: %w", err)
+			return nil, fmt.Errorf("unable to read .PKGINFO from control tar.gz file: %w", err)
 		}
 		lines := strings.Split(string(b), "\n")
 		for _, line := range lines {
@@ -210,16 +206,39 @@ func (a *APK) updateTriggers(pkg *repository.Package, controlTarGz io.Reader) er
 				continue
 			}
 			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-			if key != "triggers" {
+			if key != want {
 				continue
 			}
-			if _, err := triggers.Write([]byte(fmt.Sprintf("%s %s\n", base64.StdEncoding.EncodeToString(pkg.Checksum), value))); err != nil {
-				return fmt.Errorf("unable to write triggers file %s: %w", triggersFilePath, err)
-			}
-			break
+
+			value := strings.TrimSpace(parts[1])
+			values = append(values, value)
+		}
+
+		break
+	}
+
+	return values, nil
+}
+
+// updateTriggers insert the triggers into the triggers file
+func (a *APK) updateTriggers(pkg *repository.Package, controlTarGz io.Reader) error {
+	triggers, err := a.fs.OpenFile(triggersFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		return fmt.Errorf("unable to open triggers file %s: %w", triggersFilePath, err)
+	}
+	defer triggers.Close()
+
+	values, err := a.controlValue(controlTarGz, "triggers")
+	if err != nil {
+		return fmt.Errorf("updating triggers for %s: %w", pkg.Name, err)
+	}
+
+	for _, value := range values {
+		if _, err := triggers.Write([]byte(fmt.Sprintf("%s %s\n", base64.StdEncoding.EncodeToString(pkg.Checksum), value))); err != nil {
+			return fmt.Errorf("unable to write triggers file %s: %w", triggersFilePath, err)
 		}
 	}
+
 	return nil
 }
 
