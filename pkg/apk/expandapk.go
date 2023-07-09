@@ -8,8 +8,10 @@ package apk
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
@@ -272,17 +274,25 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 
 		if !maxStreamsReached {
 			gzi.Multistream(false)
-		}
 
-		if _, err := io.Copy(io.Discard, gzi); err != nil {
-			return nil, fmt.Errorf("expandApk error 3: %w", err)
-		}
-		gzipStreams = append(gzipStreams, sw.CurrentName())
+			if _, err := io.Copy(io.Discard, gzi); err != nil {
+				return nil, fmt.Errorf("expandApk error 3: %w", err)
+			}
 
-		if maxStreamsReached {
+			gzipStreams = append(gzipStreams, sw.CurrentName())
+		} else {
+			if err := checkSums(ctx, gzi); err != nil {
+				return nil, fmt.Errorf("checking sums: %w", err)
+			}
+			if _, err := io.Copy(io.Discard, gzi); err != nil {
+				return nil, fmt.Errorf("expandApk error 3: %w", err)
+			}
+
+			gzipStreams = append(gzipStreams, sw.CurrentName())
 			break
 		}
 	}
+
 	if err := gzi.Close(); err != nil {
 		return nil, fmt.Errorf("expandApk error 6: %w", err)
 	}
@@ -326,4 +336,47 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 	}
 
 	return &expanded, nil
+}
+
+func checkSums(ctx context.Context, r io.Reader) error {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "checkSums")
+	defer span.End()
+
+	tr := tar.NewReader(r)
+
+	for {
+		header, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if header.Typeflag != tar.TypeReg {
+			continue
+		}
+
+		checksum, err := checksumFromHeader(header)
+		if err != nil {
+			return err
+		}
+
+		// If for some reason this is missing, ignore it. We will calculate it later.
+		if checksum == nil {
+			continue
+		}
+
+		w := sha1.New() //nolint:gosec // this is what apk tools is using
+
+		if _, err := io.Copy(w, tr); err != nil {
+			return fmt.Errorf("hashing %s: %w", header.Name, err)
+		}
+
+		if want, got := checksum, w.Sum(nil); !bytes.Equal(want, got) {
+			return fmt.Errorf("checksum mismatch: %s header was %x, computed %x", header.Name, want, got)
+		}
+	}
+
+	return nil
 }
