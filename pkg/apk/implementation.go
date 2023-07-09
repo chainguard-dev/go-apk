@@ -17,8 +17,6 @@ package apk
 import (
 	"archive/tar"
 	"context"
-	"crypto/sha1" //nolint:gosec // this is what apk tools is using
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -652,19 +650,7 @@ func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackag
 		return nil, fmt.Errorf("unable to create cache directory %q: %w", cacheDir, err)
 	}
 
-	// Compute the sha1 of the control section.
-	ctl, err := os.Open(exp.ControlFile)
-	if err != nil {
-		return nil, fmt.Errorf("opening %q: %w", exp.ControlFile, err)
-	}
-	defer ctl.Close()
-
-	h1 := sha1.New() //nolint:gosec // this is what apk tools is using
-	if _, err := io.Copy(h1, ctl); err != nil {
-		return nil, fmt.Errorf("computing control section sha1: %w", err)
-	}
-
-	ctlHex := hex.EncodeToString(h1.Sum(nil))
+	ctlHex := hex.EncodeToString(exp.ControlHash)
 	ctlDst := filepath.Join(cacheDir, ctlHex+".ctl.tar.gz")
 
 	if err := os.Rename(exp.ControlFile, ctlDst); err != nil {
@@ -683,19 +669,7 @@ func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackag
 		exp.SignatureFile = sigDst
 	}
 
-	// Compute the sha256 of the data section.
-	dat, err := os.Open(exp.PackageFile)
-	if err != nil {
-		return nil, fmt.Errorf("opening %q: %w", exp.PackageFile, err)
-	}
-	defer dat.Close()
-
-	h2 := sha256.New()
-	if _, err := io.Copy(h2, dat); err != nil {
-		return nil, fmt.Errorf("computing data section sha256: %w", err)
-	}
-
-	datHex := hex.EncodeToString(h2.Sum(nil))
+	datHex := hex.EncodeToString(exp.PackageHash)
 	datDst := filepath.Join(cacheDir, datHex+".dat.tar.gz")
 
 	if err := os.Rename(exp.PackageFile, datDst); err != nil {
@@ -735,6 +709,7 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 		return nil, err
 	}
 	exp.ControlFile = ctl
+	exp.ControlHash = checksum
 
 	sig := filepath.Join(cacheDir, pkgHexSum+".sig.tar.gz")
 	if _, err := os.Stat(sig); err == nil {
@@ -758,6 +733,10 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 		return nil, err
 	}
 	exp.PackageFile = dat
+	exp.PackageHash, err = hex.DecodeString(datahash)
+	if err != nil {
+		return nil, err
+	}
 
 	return &exp, nil
 }

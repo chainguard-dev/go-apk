@@ -12,8 +12,10 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha1"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 	"path/filepath"
@@ -43,6 +45,9 @@ type APKExpanded struct {
 
 	// The package data filename in tar.gz format
 	PackageFile string
+
+	ControlHash []byte
+	PackageHash []byte
 }
 
 func (a *APKExpanded) APK() (io.ReadCloser, error) {
@@ -249,21 +254,30 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 	tr := io.TeeReader(exR, sw)
 	var gzi *gzip.Reader
 	gzipStreams := []string{}
+	hashes := [][]byte{}
 	maxStreamsReached := false
 	for {
+		// Control section uses sha1.
+		var h hash.Hash = sha1.New() //nolint:gosec // this is what apk tools is using
+
 		if err := sw.Next(); err != nil {
 			if err == errExpandApkWriterMaxStreams {
 				maxStreamsReached = true
 				exR.EnableFastRead()
+
+				// Data section uses sha256.
+				h = sha256.New()
 			} else {
 				return nil, fmt.Errorf("expandApk error 5: %w", err)
 			}
 		}
 
+		hr := io.TeeReader(tr, h)
+
 		if gzi == nil {
-			gzi, err = gzip.NewReader(tr)
+			gzi, err = gzip.NewReader(hr)
 		} else {
-			err = gzi.Reset(tr)
+			err = gzi.Reset(hr)
 		}
 
 		if err == io.EOF {
@@ -279,6 +293,7 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 				return nil, fmt.Errorf("expandApk error 3: %w", err)
 			}
 
+			hashes = append(hashes, h.Sum(nil))
 			gzipStreams = append(gzipStreams, sw.CurrentName())
 		} else {
 			if err := checkSums(ctx, gzi); err != nil {
@@ -289,6 +304,7 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 			}
 
 			gzipStreams = append(gzipStreams, sw.CurrentName())
+			hashes = append(hashes, h.Sum(nil))
 			break
 		}
 	}
@@ -329,7 +345,9 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 		Signed:      signed,
 		Size:        totalSize,
 		ControlFile: gzipStreams[controlDataIndex],
+		ControlHash: hashes[controlDataIndex],
 		PackageFile: gzipStreams[controlDataIndex+1],
+		PackageHash: hashes[controlDataIndex+1],
 	}
 	if signed {
 		expanded.SignatureFile = gzipStreams[0]
