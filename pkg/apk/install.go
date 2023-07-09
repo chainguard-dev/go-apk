@@ -132,18 +132,20 @@ func (a *APK) installAPKFiles(ctx context.Context, gzipIn io.Reader, origin, rep
 			}
 
 		case tar.TypeReg:
+			// We trust this because we verify it earlier in ExpandAPK.
 			checksum, err := checksumFromHeader(header)
 			if err != nil {
 				return nil, err
 			}
 
-			// we need to calculate the checksum of the file while reading it
-			w := sha1.New() //nolint:gosec // this is what apk tools is using
-			tee := io.TeeReader(tr, w)
-
-			r := tee
+			var r io.Reader = tr
 
 			if checksum == nil {
+				// There was no checksum header, which is unexpected, but we can just recalculate it.
+
+				w := sha1.New() //nolint:gosec // this is what apk tools is using
+				tee := io.TeeReader(tr, w)
+
 				// we need to calculate the checksum of the file, and then pass it to the writeOneFile,
 				// so we save it to a tempdir and then remove it
 				f, err := os.CreateTemp(tmpDir, "apk-file")
@@ -213,11 +215,6 @@ func (a *APK) installAPKFiles(ctx context.Context, gzipIn io.Reader, origin, rep
 				if err := a.writeOneFile(header, r, true); err != nil {
 					return nil, err
 				}
-			}
-
-			// TODO: Move individual file checksum verification into ExpandAPK so we do it just once per APK.
-			if want, got := checksum, w.Sum(nil); !bytes.Equal(want, got) {
-				return nil, fmt.Errorf("checksum mismatch: header was %x, computed %x", want, got)
 			}
 
 			// we need to save this somewhere. The output expects []tar.Header, so we need to override that.
