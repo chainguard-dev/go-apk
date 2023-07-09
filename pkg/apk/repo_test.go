@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -71,12 +72,10 @@ htBqojBnThmjJQFgZXocHG8CAwEAAQ==
 )
 
 func TestGetRepositoryIndexes(t *testing.T) {
-	var prepLayout = func(t *testing.T, cache string) *APK {
+	prepLayout := func(t *testing.T, cache string, repos []string) *APK {
 		src := apkfs.NewMemFS()
 		err := src.MkdirAll("etc/apk", 0o755)
 		require.NoError(t, err, "unable to mkdir /etc/apk")
-		err = src.WriteFile(reposFilePath, []byte(testAlpineRepos), 0o644)
-		require.NoErrorf(t, err, "unable to write repositories")
 		err = src.WriteFile(archFilePath, []byte(testArch+"\n"), 0o644)
 		require.NoErrorf(t, err, "unable to write arch")
 		err = src.MkdirAll(keysDirPath, 0o755)
@@ -84,6 +83,14 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		for k, v := range testKeys {
 			err = src.WriteFile(filepath.Join("etc/apk/keys/", k), []byte(v), 0o644)
 			require.NoError(t, err, "unable to write key %s", k)
+		}
+
+		if len(repos) > 0 {
+			err = src.WriteFile(reposFilePath, []byte(strings.Join(repos, "\n")), 0o644)
+			require.NoErrorf(t, err, "unable to write repositories")
+		} else {
+			err = src.WriteFile(reposFilePath, []byte(testAlpineRepos), 0o644)
+			require.NoErrorf(t, err, "unable to write repositories")
 		}
 
 		opts := []Option{WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors)}
@@ -97,7 +104,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		return a
 	}
 	t.Run("no cache", func(t *testing.T) {
-		a := prepLayout(t, "")
+		a := prepLayout(t, "", nil)
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
@@ -109,7 +116,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		// we use a transport that always returns a 404 so we know we're not hitting the network
 		// it should fail for a cache hit
 		tmpDir := t.TempDir()
-		a := prepLayout(t, tmpDir)
+		a := prepLayout(t, tmpDir, nil)
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{fail: true},
 		})
@@ -120,7 +127,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		// we use a transport that can read from the network
 		// it should fail for a cache hit
 		tmpDir := t.TempDir()
-		a := prepLayout(t, tmpDir)
+		a := prepLayout(t, tmpDir, nil)
 
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
@@ -140,7 +147,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		// we use a transport that can read from the network
 		// it should fail for a cache hit
 		tmpDir := t.TempDir()
-		a := prepLayout(t, tmpDir)
+		a := prepLayout(t, tmpDir, nil)
 		// fill the cache
 		repoDir := filepath.Join(tmpDir, url.QueryEscape(testAlpineRepos), testArch)
 
@@ -163,13 +170,28 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		require.NoError(t, err, "unable to read previous index file")
 		require.Equal(t, index1, index2, "index files do not match")
 	})
+	t.Run("repo url with http basic auth", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		a := prepLayout(t, tmpDir, []string{"https://user:pass@dl-cdn.alpinelinux.org/alpine/v3.16/main"})
+
+		a.SetClient(&http.Client{
+			Transport: &testLocalTransport{
+				root:             testPrimaryPkgDir,
+				basenameOnly:     true,
+				requireBasicAuth: true,
+			},
+		})
+		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+		require.NoErrorf(t, err, "unable to get indexes")
+		require.Greater(t, len(indexes), 0, "no indexes found")
+	})
 	t.Run("cache hit etag match", func(t *testing.T) {
 		// it should succeed for a cache hit
 		tmpDir := t.TempDir()
 		testEtag := "test-etag"
 
 		// get our APK struct
-		a := prepLayout(t, tmpDir)
+		a := prepLayout(t, tmpDir, nil)
 
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
@@ -201,7 +223,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		testEtag := "test-etag"
 
 		// get our APK struct
-		a := prepLayout(t, tmpDir)
+		a := prepLayout(t, tmpDir, nil)
 
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
@@ -236,7 +258,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			i := i
 			eg.Go(func() error {
-				a := prepLayout(t, tmpDir)
+				a := prepLayout(t, tmpDir, nil)
 				a.SetClient(&http.Client{
 					Transport: &testLocalTransport{
 						root:         testPrimaryPkgDir,
@@ -350,7 +372,7 @@ func TestGetPackagesWithDependences(t *testing.T) {
 		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
 		pkgs, _, err := resolver.GetPackagesWithDependencies(context.Background(), names)
 		require.NoErrorf(t, err, "unable to get packages")
-		var actual = make([]string, 0, len(pkgs))
+		actual := make([]string, 0, len(pkgs))
 		for _, pkg := range pkgs {
 			actual = append(actual, pkg.Name)
 		}
@@ -409,6 +431,7 @@ func TestGetPackagesWithDependences(t *testing.T) {
 		})
 	})
 }
+
 func TestGetPackageDependencies(t *testing.T) {
 	t.Run("normal dependencies", func(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
@@ -419,7 +442,7 @@ func TestGetPackageDependencies(t *testing.T) {
 		_, pkgs, _, err := resolver.GetPackageWithDependencies("package1", nil)
 		require.NoErrorf(t, err, "unable to get dependencies")
 
-		var actual = make([]string, 0, len(pkgs))
+		actual := make([]string, 0, len(pkgs))
 		for _, p := range pkgs {
 			actual = append(actual, p.Name)
 		}
@@ -434,7 +457,7 @@ func TestGetPackageDependencies(t *testing.T) {
 		_, pkgs, _, err := resolver.GetPackageWithDependencies("package3", nil)
 		require.NoErrorf(t, err, "unable to get dependencies")
 
-		var actual = make([]string, 0, len(pkgs))
+		actual := make([]string, 0, len(pkgs))
 		for _, p := range pkgs {
 			actual = append(actual, p.Name)
 		}
@@ -460,7 +483,7 @@ func TestGetPackageDependencies(t *testing.T) {
 				deps, _, err := resolver.getPackageDependencies(pkg6[0], "", tt.allow, nil, nil)
 				require.NoErrorf(t, err, "unable to get dependencies")
 
-				var actual = make([]string, 0, len(deps))
+				actual := make([]string, 0, len(deps))
 				for _, p := range deps {
 					actual = append(actual, p.Name)
 				}
@@ -484,7 +507,7 @@ func TestGetPackageDependencies(t *testing.T) {
 		// now make something pre-existing
 		expectedName = "package5-special"
 		expectedVersion = "1.2.0" // lower version than the highest
-		var existingPkgs = make(map[string]*repository.RepositoryPackage)
+		existingPkgs := make(map[string]*repository.RepositoryPackage)
 		for _, p := range origPkgs {
 			if p.Name == expectedName && p.Version == expectedVersion {
 				existingPkgs[p.Name] = p

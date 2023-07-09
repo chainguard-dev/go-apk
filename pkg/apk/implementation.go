@@ -328,7 +328,7 @@ func (a *APK) loadSystemKeyring(locations ...string) ([]string, error) {
 }
 
 // Installs the specified keys into the APK keyring inside the build context.
-func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string) (err error) {
+func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string) error {
 	a.logger.Infof("initializing apk keyring")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "InitKeyring")
