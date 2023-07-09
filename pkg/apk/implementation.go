@@ -351,18 +351,16 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 			a.logger.Debugf("installing key %v", element)
 
 			var asURL *url.URL
+			var err error
 			if strings.HasPrefix(element, "https://") {
 				asURL, err = url.Parse(element)
-				if err != nil {
-					return fmt.Errorf("failed to parse key as URI: %w", err)
-				}
 			} else {
 				// Attempt to parse non-https elements into URI's so they are translated into
 				// file:// URLs allowing them to parse into a url.URL{}
 				asURL, err = url.Parse(string(uri.New(element)))
-				if err != nil {
-					return fmt.Errorf("failed to parse key as URI: %w", err)
-				}
+			}
+			if err != nil {
+				return fmt.Errorf("failed to parse key as URI: %w", err)
 			}
 
 			var data []byte

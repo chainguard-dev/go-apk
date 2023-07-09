@@ -84,16 +84,13 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 		)
 		if strings.HasPrefix(u, "https://") {
 			asURL, err = url.Parse(u)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse repo as URI: %w", err)
-			}
 		} else {
-			// Attempt to parse non-https repos into URI's so they are translated into
+			// Attempt to parse non-https elements into URI's so they are translated into
 			// file:// URLs allowing them to parse into a url.URL{}
 			asURL, err = url.Parse(string(uri.New(u)))
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse repo as URI: %w", err)
-			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse repo as URI: %w", err)
 		}
 
 		switch asURL.Scheme {
