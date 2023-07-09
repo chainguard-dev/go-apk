@@ -20,9 +20,6 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-// The length of a gzip header
-const gzipHeaderLength = 10
-
 // APKExpanded contains information about and reference to an expanded APK package.
 // Close() deletes all temporary files and directories created during the expansion process.
 type APKExpanded struct {
@@ -112,9 +109,6 @@ func newExpandApkWriter(parentDir string, baseName string, ext string) (*expandA
 		ext:        ext,
 		streamId:   -1,
 		maxStreams: 2,
-	}
-	if err := sw.Next(); err != nil {
-		return nil, fmt.Errorf("newExpandApkWriter: %w", err)
 	}
 	return &sw, nil
 }
@@ -251,28 +245,10 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 	}
 	exR := newExpandApkReader(source)
 	tr := io.TeeReader(exR, sw)
-	gzi, err := gzip.NewReader(tr)
-	if err != nil {
-		return nil, fmt.Errorf("expandApk error 2: %w", err)
-	}
+	var gzi *gzip.Reader
 	gzipStreams := []string{}
 	maxStreamsReached := false
 	for {
-		if !maxStreamsReached {
-			gzi.Multistream(false)
-		}
-		_, err := io.Copy(io.Discard, gzi)
-		if err != nil {
-			return nil, fmt.Errorf("expandApk error 3: %w", err)
-		}
-		gzipStreams = append(gzipStreams, sw.CurrentName())
-		if err := gzi.Reset(tr); err != nil {
-			if err == io.EOF {
-				break
-			} else {
-				return nil, fmt.Errorf("expandApk error 4: %w", err)
-			}
-		}
 		if err := sw.Next(); err != nil {
 			if err == errExpandApkWriterMaxStreams {
 				maxStreamsReached = true
@@ -280,6 +256,31 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 			} else {
 				return nil, fmt.Errorf("expandApk error 5: %w", err)
 			}
+		}
+
+		if gzi == nil {
+			gzi, err = gzip.NewReader(tr)
+		} else {
+			err = gzi.Reset(tr)
+		}
+
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, fmt.Errorf("creating gzip reader: %w", err)
+		}
+
+		if !maxStreamsReached {
+			gzi.Multistream(false)
+		}
+
+		if _, err := io.Copy(io.Discard, gzi); err != nil {
+			return nil, fmt.Errorf("expandApk error 3: %w", err)
+		}
+		gzipStreams = append(gzipStreams, sw.CurrentName())
+
+		if maxStreamsReached {
+			break
 		}
 	}
 	if err := gzi.Close(); err != nil {
@@ -290,55 +291,6 @@ func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
 	}
 
 	numGzipStreams := len(gzipStreams)
-
-	// Fix streams (magic headers are in wrong stream)
-	for i, s := range gzipStreams[:numGzipStreams-1] {
-		// 1. take off the last 10 bytes
-		f, err := os.Open(s)
-		if err != nil {
-			return nil, fmt.Errorf("expandApk error 8: %w", err)
-		}
-		pos, err := f.Seek(-gzipHeaderLength, io.SeekEnd)
-		if err != nil {
-			return nil, fmt.Errorf("expandApk error 9: %w", err)
-		}
-		b := make([]byte, gzipHeaderLength)
-		if _, err := io.ReadFull(f, b); err != nil {
-			return nil, fmt.Errorf("expandApk error 10: %w", err)
-		}
-		f.Close()
-		f, err = os.OpenFile(s, os.O_WRONLY, 0644)
-		if err != nil {
-			return nil, fmt.Errorf("expandApk error 11: %w", err)
-		}
-		if err := f.Truncate(pos); err != nil {
-			return nil, fmt.Errorf("expandApk error 12: %w", err)
-		}
-
-		// 2. prepend them onto the next stream
-		nextStream := gzipStreams[i+1]
-		f, err = os.Open(nextStream)
-		if err != nil {
-			return nil, fmt.Errorf("expandApk error 13: %w", err)
-		}
-		f2, err := os.Create(fmt.Sprintf("%s.tmp", nextStream))
-		if err != nil {
-			return nil, fmt.Errorf("expandApk error 14: %w", err)
-		}
-		if _, err := f2.Write(b); err != nil {
-			return nil, fmt.Errorf("expandApk error 15: %w", err)
-		}
-		if _, err := io.Copy(f2, f); err != nil {
-			return nil, fmt.Errorf("expandApk error 16: %w", err)
-		}
-		n := f.Name()
-		n2 := f2.Name()
-		f.Close()
-		f2.Close()
-		if err := os.Rename(n2, n); err != nil {
-			return nil, fmt.Errorf("expandApk error 17: %w", err)
-		}
-	}
 
 	// Calculate the total size of the apk (combo of all streams)
 	totalSize := int64(0)
