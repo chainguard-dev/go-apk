@@ -17,7 +17,6 @@ package apk
 import (
 	"archive/tar"
 	"bufio"
-	"compress/gzip"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -28,6 +27,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/klauspost/compress/gzip"
 
 	"gitlab.alpinelinux.org/alpine/go/repository"
 )

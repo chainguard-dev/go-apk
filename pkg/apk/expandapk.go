@@ -9,7 +9,6 @@ package apk
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -20,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/klauspost/compress/gzip"
 
 	"go.opentelemetry.io/otel"
 )
