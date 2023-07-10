@@ -80,14 +80,15 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 		// into a url.URL{}.
 		var (
 			b     []byte
-			asURI uri.URI
+			asURL *url.URL
 		)
 		if strings.HasPrefix(u, "https://") {
-			asURI, _ = uri.Parse(u)
+			asURL, err = url.Parse(u)
 		} else {
-			asURI = uri.New(u)
+			// Attempt to parse non-https elements into URI's so they are translated into
+			// file:// URLs allowing them to parse into a url.URL{}
+			asURL, err = url.Parse(string(uri.New(u)))
 		}
-		asURL, err := url.Parse(string(asURI))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse repo as URI: %w", err)
 		}
@@ -109,6 +110,12 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, asURL.String(), nil)
 			if err != nil {
 				return nil, err
+			}
+			// if the repo URL contains HTTP Basic Auth credentials, add them to the request
+			if asURL.User != nil {
+				user := asURL.User.Username()
+				pass, _ := asURL.User.Password()
+				req.SetBasicAuth(user, pass)
 			}
 			res, err := client.Do(req)
 			if err != nil {

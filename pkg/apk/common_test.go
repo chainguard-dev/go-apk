@@ -30,10 +30,11 @@ const (
 )
 
 type testLocalTransport struct {
-	fail         bool
-	root         string
-	basenameOnly bool
-	headers      map[string][]string
+	fail             bool
+	root             string
+	basenameOnly     bool
+	headers          map[string][]string
+	requireBasicAuth bool
 }
 
 func (t *testLocalTransport) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -43,6 +44,15 @@ func (t *testLocalTransport) RoundTrip(request *http.Request) (*http.Response, e
 			Body:       io.NopCloser(bytes.NewBuffer([]byte("not found"))),
 		}, nil
 	}
+	if t.requireBasicAuth {
+		if _, _, ok := request.BasicAuth(); !ok {
+			return &http.Response{
+				StatusCode: 401,
+				Body:       io.NopCloser(bytes.NewBuffer([]byte("unauthorized"))),
+			}, nil
+		}
+	}
+
 	var target string
 	if t.basenameOnly {
 		target = filepath.Join(t.root, filepath.Base(request.URL.Path))

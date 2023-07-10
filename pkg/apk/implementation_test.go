@@ -190,6 +190,15 @@ func TestInitKeyring(t *testing.T) {
 		"http://sldkjflskdjflklksdlksdlkjslk.net",
 	}
 	require.Error(t, a.InitKeyring(context.Background(), keyfiles, nil))
+
+	// add a remote key with HTTP Basic Auth
+	keyfiles = []string{
+		"https://user:pass@alpinelinux.org/keys/alpine-devel%40lists.alpinelinux.org-4a6a0840.rsa.pub",
+	}
+	a.SetClient(&http.Client{
+		Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true, requireBasicAuth: true},
+	})
+	require.NoError(t, a.InitKeyring(context.Background(), keyfiles, nil))
 }
 
 func TestLoadSystemKeyring(t *testing.T) {
@@ -279,7 +288,7 @@ func TestFetchPackage(t *testing.T) {
 		pkg      = repository.NewRepositoryPackage(&testPkg, repoWithIndex)
 		ctx      = context.Background()
 	)
-	var prepLayout = func(t *testing.T, cache string) *APK {
+	prepLayout := func(t *testing.T, cache string) *APK {
 		src := apkfs.NewMemFS()
 		err := src.MkdirAll("lib/apk/db", 0o755)
 		require.NoError(t, err, "unable to mkdir /lib/apk/db")
