@@ -636,19 +636,11 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 	return nil
 }
 
-func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackage, exp *APKExpanded) (*APKExpanded, error) {
+func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackage, exp *APKExpanded, cacheDir string) (*APKExpanded, error) {
 	_, span := otel.Tracer("go-apk").Start(ctx, "cachePackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()
 
 	// Rename exp's temp files to content-addressable identifiers in the cache.
-	cacheDir, err := cacheDirForPackage(a.cache.dir, pkg)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return nil, fmt.Errorf("unable to create cache directory %q: %w", cacheDir, err)
-	}
 
 	ctlHex := hex.EncodeToString(exp.ControlHash)
 	ctlDst := filepath.Join(cacheDir, ctlHex+".ctl.tar.gz")
@@ -681,7 +673,7 @@ func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackag
 	return exp, nil
 }
 
-func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPackage) (*APKExpanded, error) {
+func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPackage, cacheDir string) (*APKExpanded, error) {
 	_, span := otel.Tracer("go-apk").Start(ctx, "cachedPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()
 
@@ -696,11 +688,6 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	}
 
 	pkgHexSum := hex.EncodeToString(checksum)
-
-	cacheDir, err := cacheDirForPackage(a.cache.dir, pkg)
-	if err != nil {
-		return nil, err
-	}
 
 	exp := APKExpanded{}
 
@@ -745,14 +732,25 @@ func (a *APK) expandPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "expandPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()
 
+	cacheDir := ""
 	if a.cache != nil {
-		exp, err := a.cachedPackage(ctx, pkg)
+		var err error
+		cacheDir, err = cacheDirForPackage(a.cache.dir, pkg)
+		if err != nil {
+			return nil, err
+		}
+
+		exp, err := a.cachedPackage(ctx, pkg, cacheDir)
 		if err == nil {
 			a.logger.Debugf("cache hit (%s)", pkg.Name)
 			return exp, nil
 		}
 
 		a.logger.Debugf("cache miss (%s): %v", pkg.Name, err)
+
+		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+			return nil, fmt.Errorf("unable to create cache directory %q: %w", cacheDir, err)
+		}
 	}
 
 	rc, err := a.fetchPackage(ctx, pkg)
@@ -761,7 +759,7 @@ func (a *APK) expandPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	}
 	defer rc.Close()
 
-	exp, err := ExpandApk(ctx, rc)
+	exp, err := ExpandApk(ctx, rc, cacheDir)
 	if err != nil {
 		return nil, fmt.Errorf("expanding %s: %w", pkg.Name, err)
 	}
@@ -771,7 +769,7 @@ func (a *APK) expandPackage(ctx context.Context, pkg *repository.RepositoryPacka
 		return exp, nil
 	}
 
-	return a.cachePackage(ctx, pkg, exp)
+	return a.cachePackage(ctx, pkg, exp, cacheDir)
 }
 
 func packageAsURI(pkg *repository.RepositoryPackage) (uri.URI, error) {

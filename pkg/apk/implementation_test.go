@@ -345,7 +345,7 @@ func TestFetchPackage(t *testing.T) {
 		_, err = os.Stat(cacheApkDir)
 		require.NoError(t, err, "apk file not found in cache")
 		// check that the contents are the same
-		exp, err := a.cachedPackage(ctx, pkg)
+		exp, err := a.cachedPackage(ctx, pkg, cacheApkDir)
 		if err != nil {
 			t.Logf("did not find cachedPackage(%q) in %s: %v", pkg.Name, cacheApkDir, err)
 			files, err := os.ReadDir(cacheApkDir)
