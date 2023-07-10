@@ -238,11 +238,11 @@ func (r *expandApkReader) EnableFastRead() {
 //
 // Returns an APKExpanded struct containing references to the file. You *must* call APKExpanded.Close()
 // when finished to clean up the various files.
-func ExpandApk(ctx context.Context, source io.Reader) (*APKExpanded, error) {
+func ExpandApk(ctx context.Context, source io.Reader, cacheDir string) (*APKExpanded, error) {
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "ExpandApk")
 	defer span.End()
 
-	dir, err := os.MkdirTemp("", "")
+	dir, err := os.MkdirTemp(cacheDir, "expand-apk")
 	if err != nil {
 		return nil, err
 	}
