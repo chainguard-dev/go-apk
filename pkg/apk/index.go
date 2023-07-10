@@ -17,7 +17,6 @@ package apk
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -28,6 +27,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/klauspost/compress/gzip"
 
 	sign "github.com/chainguard-dev/go-apk/pkg/signature"
 	"github.com/hashicorp/go-retryablehttp"
