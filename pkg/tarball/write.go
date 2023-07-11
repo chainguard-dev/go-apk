@@ -86,6 +86,8 @@ func (c *Context) writeTar(ctx context.Context, tw *tar.Writer, fsys fs.FS, user
 		c.overridePerms = map[string]tar.Header{}
 	}
 
+	buf := make([]byte, 1<<20)
+
 	if err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -253,7 +255,7 @@ func (c *Context) writeTar(ctx context.Context, tw *tar.Writer, fsys fs.FS, user
 
 			defer data.Close()
 
-			if _, err := io.Copy(tw, data); err != nil {
+			if _, err := io.CopyBuffer(tw, data, buf); err != nil {
 				return err
 			}
 		}
