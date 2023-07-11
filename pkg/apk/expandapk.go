@@ -8,6 +8,7 @@ package apk
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha1"
@@ -65,7 +66,7 @@ func (a *APKExpanded) PackageData() (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	return gzip.NewReader(f)
+	return gzip.NewReader(bufio.NewReaderSize(f, 1<<20))
 }
 
 func (a *APKExpanded) APK() (io.ReadCloser, error) {
