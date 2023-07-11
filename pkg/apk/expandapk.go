@@ -49,6 +49,23 @@ type APKExpanded struct {
 
 	ControlHash []byte
 	PackageHash []byte
+
+	packageData io.ReadCloser
+}
+
+func (a *APKExpanded) PackageData() (io.ReadCloser, error) {
+	if a.packageData != nil {
+		rc := a.packageData
+		a.packageData = nil
+		return rc, nil
+	}
+
+	f, err := os.Open(a.PackageFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return gzip.NewReader(f)
 }
 
 func (a *APKExpanded) APK() (io.ReadCloser, error) {
@@ -90,11 +107,14 @@ func (m *multiReadCloser) Close() error {
 }
 
 func (a *APKExpanded) Close() error {
-	if a.tempDir == "" {
-		return nil
+	errs := []error{}
+	if a.packageData != nil {
+		errs = append(errs, a.packageData.Close())
 	}
-
-	return os.RemoveAll(a.tempDir)
+	if a.tempDir != "" {
+		errs = append(errs, os.RemoveAll(a.tempDir))
+	}
+	return errors.Join(errs...)
 }
 
 // An implementation of io.Writer designed specifically for use in the expandApk() method.

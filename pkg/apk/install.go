@@ -27,8 +27,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/klauspost/compress/gzip"
-
 	"go.opentelemetry.io/otel"
 )
 
@@ -69,28 +67,24 @@ func (a *APK) writeOneFile(header *tar.Header, r io.Reader, allowOverwrite bool)
 // installAPKFiles install the files from the APK and return the list of installed files
 // and their permissions. Returns a tar.Header because it is a convenient existing
 // struct that has all of the fields we need.
-func (a *APK) installAPKFiles(ctx context.Context, gzipIn io.Reader, origin, replaces string) ([]tar.Header, error) { //nolint:gocyclo
+func (a *APK) installAPKFiles(ctx context.Context, in io.Reader, origin, replaces string) ([]tar.Header, error) { //nolint:gocyclo
 	_, span := otel.Tracer("go-apk").Start(ctx, "installAPKFiles")
 	defer span.End()
 
 	var files []tar.Header
-	gr, err := gzip.NewReader(gzipIn)
-	if err != nil {
-		return nil, err
-	}
-	defer gr.Close()
 	tmpDir, err := os.MkdirTemp("", "apk-install")
 	if err != nil {
 		return nil, fmt.Errorf("unable to create temporary directory for unpacking an apk: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
+
 	// per https://git.alpinelinux.org/apk-tools/tree/src/extract_v2.c?id=337734941831dae9a6aa441e38611c43a5fd72c0#n120
 	//  * APKv1.0 compatibility - first non-hidden file is
 	//  * considered to start the data section of the file.
 	//  * This does not make any sense if the file has v2.0
 	//  * style .PKGINFO
 	var startedDataSection bool
-	tr := tar.NewReader(gr)
+	tr := tar.NewReader(in)
 	for {
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
