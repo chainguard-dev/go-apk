@@ -550,7 +550,7 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 
 			// Start gunzipping this ahead of time so we can install it faster.
 			// We may want to tune these numbers a bit based on package size or count.
-			exp.packageData = readahead.NewReadCloser(pd)
+			exp.SetPackageData(readahead.NewReadCloser(pd))
 
 			expanded[i] = exp
 			close(done[i])
@@ -702,16 +702,20 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	exp := APKExpanded{}
 
 	ctl := filepath.Join(cacheDir, pkgHexSum+".ctl.tar.gz")
-	if _, err := os.Stat(ctl); err != nil {
+	cf, err := os.Stat(ctl)
+	if err != nil {
 		return nil, err
 	}
 	exp.ControlFile = ctl
 	exp.ControlHash = checksum
+	exp.Size += cf.Size()
 
 	sig := filepath.Join(cacheDir, pkgHexSum+".sig.tar.gz")
-	if _, err := os.Stat(sig); err == nil {
+	sf, err := os.Stat(sig)
+	if err == nil {
 		exp.SignatureFile = sig
 		exp.Signed = true
+		exp.Size += sf.Size()
 	}
 
 	f, err := os.Open(ctl)
@@ -726,10 +730,13 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	}
 
 	dat := filepath.Join(cacheDir, datahash+".dat.tar.gz")
-	if _, err := os.Stat(dat); err != nil {
+	df, err := os.Stat(dat)
+	if err != nil {
 		return nil, err
 	}
 	exp.PackageFile = dat
+	exp.Size += df.Size()
+
 	exp.PackageHash, err = hex.DecodeString(datahash)
 	if err != nil {
 		return nil, err
