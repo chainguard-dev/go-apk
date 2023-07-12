@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/klauspost/compress/gzip"
 
@@ -51,10 +52,23 @@ type APKExpanded struct {
 	ControlHash []byte
 	PackageHash []byte
 
+	sync.Mutex
 	packageData io.ReadCloser
 }
 
+const meg = 1 << 20
+
+func (a *APKExpanded) SetPackageData(rc io.ReadCloser) {
+	a.Lock()
+	defer a.Unlock()
+
+	a.packageData = rc
+}
+
 func (a *APKExpanded) PackageData() (io.ReadCloser, error) {
+	a.Lock()
+	defer a.Unlock()
+
 	if a.packageData != nil {
 		rc := a.packageData
 		a.packageData = nil
@@ -66,7 +80,13 @@ func (a *APKExpanded) PackageData() (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	return gzip.NewReader(bufio.NewReaderSize(f, 1<<20))
+	// Use min(1MB, a.Size) bufio to avoid GC pressure for small packages.
+	bufSize := meg
+	if total := int(a.Size); total != 0 && total < bufSize {
+		bufSize = total
+	}
+
+	return gzip.NewReader(bufio.NewReaderSize(f, bufSize))
 }
 
 func (a *APKExpanded) APK() (io.ReadCloser, error) {
