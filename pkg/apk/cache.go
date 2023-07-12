@@ -93,7 +93,7 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 		return t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
 			// On the etag path, use the etag from the actual response to
 			// compute the final file name.
-			finalEtag, ok := etagFromResponse(resp)
+			finalEtag, ok := etagFromResponse(r)
 			if !ok {
 				return "", fmt.Errorf("GET response did not contain an etag, but HEAD returned %q", initialEtag)
 			}
