@@ -23,6 +23,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"go.opentelemetry.io/otel"
@@ -146,7 +147,7 @@ func (c *Context) writeTar(ctx context.Context, tw *tar.Writer, fsys fs.FS, user
 			header.Devminor = int64(minor)
 		}
 		// work around some weirdness, without this we wind up with just the basename
-		header.Name = path
+		header.Name = filepath.Join(c.BaseDir, path)
 
 		// zero out timestamps for reproducibility
 		header.AccessTime = c.SourceDateEpoch
