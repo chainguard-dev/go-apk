@@ -118,7 +118,10 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 				pass, _ := asURL.User.Password()
 				req.SetBasicAuth(user, pass)
 			}
-			res, err := client.Do(req)
+
+			// This will return a body that retries requests using Range requests if Read() hits an error.
+			rrt := newRangeRetryTransport(ctx, client)
+			res, err := rrt.RoundTrip(req)
 			if err != nil {
 				return nil, fmt.Errorf("unable to get repository index at %s: %w", u, err)
 			}
