@@ -32,6 +32,7 @@ type dirFSOpts struct {
 	caseSensitive    bool
 	caseSensitiveSet bool
 	mkdir            bool
+	xattrFilters     []func(string, string) bool
 }
 
 // DirFSOption is an option for DirFS
@@ -54,6 +55,20 @@ func DirFSWithCaseSensitive(caseSensitive bool) DirFSOption {
 func WithCreateDir() DirFSOption {
 	return func(opts *dirFSOpts) error {
 		opts.mkdir = true
+		return nil
+	}
+}
+
+// WithXattrFilter allows you to specify a filter function to ignore certain
+// xattrs. This can safely be set multiple times, and all filters will be
+// applied.
+func WithXattrFilter(filter func(string, string) bool) DirFSOption {
+	return func(opts *dirFSOpts) error {
+		if opts.xattrFilters == nil {
+			opts.xattrFilters = []func(string, string) bool{filter}
+		} else {
+			opts.xattrFilters = append(opts.xattrFilters, filter)
+		}
 		return nil
 	}
 }
@@ -114,9 +129,10 @@ func DirFS(dir string, opts ...DirFSOption) FullFS {
 		caseMap = map[string]string{}
 	}
 	f := &dirFS{
-		base:      dir,
-		overrides: m,
-		caseMap:   caseMap,
+		base:         dir,
+		overrides:    m,
+		caseMap:      caseMap,
+		xattrFilters: options.xattrFilters,
 	}
 	// need to populate the overrides with appropriate info
 	root := os.DirFS(dir)
@@ -195,6 +211,7 @@ type dirFS struct {
 	// can exist on disk. Maps the case-sensitive to the case-insensitive variant
 	caseMap      map[string]string
 	caseMapMutex sync.Mutex
+	xattrFilters []func(string, string) bool
 }
 
 func (f *dirFS) Readlink(name string) (string, error) {
@@ -517,16 +534,29 @@ func (f *dirFS) Mknod(name string, mode uint32, dev int) error {
 }
 
 func (f *dirFS) SetXattr(path string, attr string, data []byte) error {
+	for _, filter := range f.xattrFilters {
+		if filter(path, attr) {
+			return nil
+		}
+	}
 	// the underlying filesystem might or might not support xattrs
 	// but we have info on every file in memory, so might as well store it there.
 	return f.overrides.SetXattr(path, attr, data)
 }
+
 func (f *dirFS) GetXattr(path string, attr string) ([]byte, error) {
+	for _, filter := range f.xattrFilters {
+		if filter(path, attr) {
+			return nil, os.ErrNotExist
+		}
+	}
 	return f.overrides.GetXattr(path, attr)
 }
+
 func (f *dirFS) RemoveXattr(path string, attr string) error {
 	return f.overrides.RemoveXattr(path, attr)
 }
+
 func (f *dirFS) ListXattrs(path string) (map[string][]byte, error) {
 	return f.overrides.ListXattrs(path)
 }

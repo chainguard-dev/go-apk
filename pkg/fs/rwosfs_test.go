@@ -79,9 +79,7 @@ func TestMissingDir(t *testing.T) {
 }
 
 func TestCaseInsensitive(t *testing.T) {
-	var (
-		err error
-	)
+	var err error
 	files := []struct {
 		path    string
 		dir     bool
@@ -194,4 +192,34 @@ func TestDirFSConsistentOrdering(t *testing.T) {
 		require.Equal(t, results, result, "iteration %d", i)
 	}
 	// all results should be the same
+}
+
+func TestDirFSXattrFiltering(t *testing.T) {
+	tdir := t.TempDir()
+	fsys := DirFS(tdir, WithXattrFilter(func(_, attr string) bool {
+		return attr == "foo"
+	}))
+
+	var (
+		dir  = "/a"
+		file = "/a/b"
+	)
+
+	err := fsys.Mkdir(dir, 0o755)
+	require.NoError(t, err)
+	err = fsys.WriteFile(file, []byte("hello"), 0o644)
+	require.NoError(t, err)
+
+	// Named "foo" should get skipped
+	err = fsys.SetXattr(file, "foo", []byte("bar"))
+	require.NoError(t, err)
+	_, err = fsys.GetXattr(file, "foo")
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	// Others should not get skipped
+	err = fsys.SetXattr(file, "bar", []byte("baz"))
+	require.NoError(t, err)
+	val, err := fsys.GetXattr(file, "bar")
+	require.NoError(t, err)
+	require.Equal(t, "baz", string(val))
 }
