@@ -223,7 +223,7 @@ func (c *Context) writeTar(ctx context.Context, tw *tar.Writer, fsys fs.FS, user
 				defer data.Close()
 
 				fileDigest := sha1.New() //nolint:gosec
-				if _, err := io.Copy(fileDigest, data); err != nil {
+				if _, err := io.CopyBuffer(fileDigest, data, buf); err != nil {
 					return err
 				}
 
