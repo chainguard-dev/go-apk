@@ -43,7 +43,6 @@ import (
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 	logger "github.com/chainguard-dev/go-apk/pkg/logger"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/klauspost/readahead"
 )
 
 type APK struct {
@@ -543,15 +542,6 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 				return fmt.Errorf("expanding %s: %w", pkg.Name, err)
 			}
 
-			pd, err := exp.PackageData()
-			if err != nil {
-				return fmt.Errorf("package data: %w", err)
-			}
-
-			// Start gunzipping this ahead of time so we can install it faster.
-			// We may want to tune these numbers a bit based on package size or count.
-			exp.SetPackageData(readahead.NewReadCloser(pd))
-
 			expanded[i] = exp
 			close(done[i])
 
@@ -680,6 +670,12 @@ func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackag
 
 	exp.PackageFile = datDst
 
+	tarDst := strings.TrimSuffix(exp.PackageFile, ".gz")
+	if err := os.Rename(exp.tarFile, tarDst); err != nil {
+		return nil, fmt.Errorf("renaming control file: %w", err)
+	}
+	exp.tarFile = tarDst
+
 	return exp, nil
 }
 
@@ -741,6 +737,8 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	if err != nil {
 		return nil, err
 	}
+
+	exp.tarFile = strings.TrimSuffix(exp.PackageFile, ".gz")
 
 	return &exp, nil
 }

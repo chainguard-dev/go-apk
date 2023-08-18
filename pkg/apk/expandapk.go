@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/klauspost/compress/gzip"
 
@@ -46,47 +45,80 @@ type APKExpanded struct {
 	// The control data filename (a.k.a. ".PKGINFO") in tar.gz format
 	ControlFile string
 
-	// The package data filename in tar.gz format
+	// The package data filename in .tar.gz format
 	PackageFile string
+
+	// The package data filename in .tar format.
+	tarFile string
 
 	ControlHash []byte
 	PackageHash []byte
+}
 
-	sync.Mutex
-	packageData io.ReadCloser
+// This exists so we can have a bufio.ReadCloser.
+type readCloser struct {
+	io.Reader
+	CloseFunc func() error
+}
+
+// Close implements io.ReadCloser
+func (rc *readCloser) Close() error {
+	return rc.CloseFunc()
 }
 
 const meg = 1 << 20
 
-func (a *APKExpanded) SetPackageData(rc io.ReadCloser) {
-	a.Lock()
-	defer a.Unlock()
-
-	a.packageData = rc
-}
-
 func (a *APKExpanded) PackageData() (io.ReadCloser, error) {
-	a.Lock()
-	defer a.Unlock()
-
-	if a.packageData != nil {
-		rc := a.packageData
-		a.packageData = nil
-		return rc, nil
-	}
-
-	f, err := os.Open(a.PackageFile)
-	if err != nil {
-		return nil, err
-	}
-
 	// Use min(1MB, a.Size) bufio to avoid GC pressure for small packages.
 	bufSize := meg
 	if total := int(a.Size); total != 0 && total < bufSize {
 		bufSize = total
 	}
 
-	return gzip.NewReader(bufio.NewReaderSize(f, bufSize))
+	uf, err := os.Open(a.tarFile)
+	if err == nil {
+		return &readCloser{
+			Reader:    bufio.NewReaderSize(uf, bufSize),
+			CloseFunc: uf.Close,
+		}, nil
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("opening package data file: %w", err)
+	}
+
+	// Handle old caches without the uncompressed file.
+	f, err := os.Open(a.PackageFile)
+	if err != nil {
+		return nil, fmt.Errorf("opening %q: %w", a.PackageFile, err)
+	}
+
+	br := bufio.NewReaderSize(f, bufSize)
+	zr, err := gzip.NewReader(br)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %q: %w", a.PackageFile, err)
+	}
+
+	uf, err = os.Create(a.tarFile)
+	if err != nil {
+		return nil, fmt.Errorf("opening tar file %q: %w", a.tarFile, err)
+	}
+	bw := bufio.NewWriterSize(uf, 1<<20)
+	if _, err := io.Copy(bw, zr); err != nil {
+		return nil, fmt.Errorf("expanding %q: %w", a.PackageFile, err)
+	}
+	if err := bw.Flush(); err != nil {
+		return nil, fmt.Errorf("flushing %q: %w", a.tarFile, err)
+	}
+
+	if _, err := uf.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seeking %q: %w", a.tarFile, err)
+	}
+
+	br.Reset(uf)
+
+	return &readCloser{
+		Reader:    br,
+		CloseFunc: uf.Close,
+	}, nil
 }
 
 func (a *APKExpanded) APK() (io.ReadCloser, error) {
@@ -128,14 +160,10 @@ func (m *multiReadCloser) Close() error {
 }
 
 func (a *APKExpanded) Close() error {
-	errs := []error{}
-	if a.packageData != nil {
-		errs = append(errs, a.packageData.Close())
+	if a.tempDir == "" {
+		return nil
 	}
-	if a.tempDir != "" {
-		errs = append(errs, os.RemoveAll(a.tempDir))
-	}
-	return errors.Join(errs...)
+	return os.RemoveAll(a.tempDir)
 }
 
 // An implementation of io.Writer designed specifically for use in the expandApk() method.
@@ -338,13 +366,29 @@ func ExpandApk(ctx context.Context, source io.Reader, cacheDir string) (*APKExpa
 			hashes = append(hashes, h.Sum(nil))
 			gzipStreams = append(gzipStreams, sw.CurrentName())
 		} else {
-			if err := checkSums(ctx, gzi); err != nil {
+			// While we verify checksums, also tee the tar to a separate file.
+			tarfilename := strings.TrimSuffix(sw.CurrentName(), ".gz")
+			tarfile, err := os.Create(tarfilename)
+			if err != nil {
+				return nil, fmt.Errorf("opening tar file: %w", err)
+			}
+			bw := bufio.NewWriterSize(tarfile, 1<<20)
+			tr := io.TeeReader(gzi, bw)
+
+			if err := checkSums(ctx, tr); err != nil {
 				return nil, fmt.Errorf("checking sums: %w", err)
 			}
-			if _, err := io.Copy(io.Discard, gzi); err != nil {
+			if _, err := io.Copy(io.Discard, tr); err != nil {
 				return nil, fmt.Errorf("expandApk error 3: %w", err)
 			}
 
+			if err := bw.Flush(); err != nil {
+				return nil, fmt.Errorf("flushing tarfile: %w", err)
+			}
+
+			if err := tarfile.Close(); err != nil {
+				return nil, fmt.Errorf("closing tarfile: %w", err)
+			}
 			gzipStreams = append(gzipStreams, sw.CurrentName())
 			hashes = append(hashes, h.Sum(nil))
 			break
@@ -394,6 +438,8 @@ func ExpandApk(ctx context.Context, source io.Reader, cacheDir string) (*APKExpa
 	if signed {
 		expanded.SignatureFile = gzipStreams[0]
 	}
+
+	expanded.tarFile = strings.TrimSuffix(expanded.PackageFile, ".gz")
 
 	return &expanded, nil
 }
