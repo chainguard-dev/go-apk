@@ -28,7 +28,8 @@ import (
 
 // cache
 type cache struct {
-	dir string
+	dir     string
+	offline bool
 }
 
 // client return an http.Client that knows how to read from and write to the cache
@@ -38,6 +39,7 @@ func (c cache) client(wrapped *http.Client, etagRequired bool) *http.Client {
 		Transport: &cacheTransport{
 			wrapped:      wrapped,
 			root:         c.dir,
+			offline:      c.offline,
 			etagRequired: etagRequired,
 		},
 	}
@@ -46,6 +48,7 @@ func (c cache) client(wrapped *http.Client, etagRequired bool) *http.Client {
 type cacheTransport struct {
 	wrapped      *http.Client
 	root         string
+	offline      bool
 	etagRequired bool
 }
 
@@ -66,12 +69,54 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 		// If we hit an error, just send the request.
 		f, err := os.Open(cacheFile)
 		if err != nil {
+			if t.offline {
+				return nil, fmt.Errorf("failed to read %q in offline cache: %w", cacheFile, err)
+			}
 			return t.wrapped.Do(request)
 		}
 
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       f,
+		}, nil
+	}
+
+	if t.offline {
+		cacheDir := cacheDirFromFile(cacheFile)
+		des, err := os.ReadDir(cacheDir)
+		if err != nil {
+			return nil, fmt.Errorf("listing %q for offline cache: %w", cacheDir, err)
+		}
+
+		if len(des) == 0 {
+			return nil, fmt.Errorf("no offline cached entries for %s", cacheDir)
+		}
+
+		newest, err := des[0].Info()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, de := range des[1:] {
+			fi, err := de.Info()
+			if err != nil {
+				return nil, err
+			}
+
+			if fi.ModTime().After(newest.ModTime()) {
+				newest = fi
+			}
+		}
+
+		f, err := os.Open(filepath.Join(cacheDir, newest.Name()))
+		if err != nil {
+			return nil, err
+		}
+
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Body:          f,
+			ContentLength: newest.Size(),
 		}, nil
 	}
 
@@ -102,9 +147,18 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 		})
 	}
 	return &http.Response{
-		StatusCode: http.StatusOK,
-		Body:       f,
+		StatusCode:    http.StatusOK,
+		Body:          f,
+		ContentLength: resp.ContentLength,
 	}, nil
+}
+
+func cacheDirFromFile(cacheFile string) string {
+	if strings.HasSuffix(cacheFile, "APKINDEX.tar.gz") {
+		return filepath.Join(filepath.Dir(cacheFile), "APKINDEX")
+	}
+
+	return filepath.Dir(cacheFile)
 }
 
 func cacheFileFromEtag(cacheFile, etag string) string {

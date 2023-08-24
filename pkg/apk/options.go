@@ -88,7 +88,10 @@ func WithFS(fs apkfs.FullFS) Option {
 
 // WithCache sets to use a cache directory for downloaded apk files and APKINDEX files.
 // If not provided, will not cache.
-func WithCache(cacheDir string) Option {
+//
+// If offline is true, only read from the cache and do not make any network requests to
+// populate it.
+func WithCache(cacheDir string, offline bool) Option {
 	return func(o *opts) error {
 		var err error
 		if cacheDir == "" {
@@ -98,7 +101,10 @@ func WithCache(cacheDir string) Option {
 			}
 			cacheDir = filepath.Join(cacheDir, "dev.chainguard.go-apk")
 		}
-		o.cache = &cache{dir: cacheDir}
+		o.cache = &cache{
+			dir:     cacheDir,
+			offline: offline,
+		}
 		return nil
 	}
 }
