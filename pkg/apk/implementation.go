@@ -373,6 +373,9 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 				if client == nil {
 					client = retryablehttp.NewClient().StandardClient()
 				}
+				if a.cache != nil {
+					client = a.cache.client(client, true)
+				}
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, asURL.String(), nil)
 				if err != nil {
 					return err
