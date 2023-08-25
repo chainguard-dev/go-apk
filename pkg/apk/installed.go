@@ -18,6 +18,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -77,8 +78,17 @@ func (a *APK) addInstalledPackage(pkg *repository.Package, files []tar.Header) e
 			if perm != 0o644 || user != 0 || group != 0 {
 				pkgLines = append(pkgLines, fmt.Sprintf("a:%d:%d:%04o", user, group, perm))
 			}
-			if f.PAXRecords != nil && f.PAXRecords[paxRecordsChecksumKey] != "" {
-				pkgLines = append(pkgLines, fmt.Sprintf("Z:%s", f.PAXRecords[paxRecordsChecksumKey]))
+			if f.PAXRecords != nil {
+				if checksum := f.PAXRecords[paxRecordsChecksumKey]; checksum != "" {
+					if !strings.HasPrefix(checksum, "Q1") {
+						hexsum, err := hex.DecodeString(checksum)
+						if err != nil {
+							return err
+						}
+						checksum = "Q1" + base64.StdEncoding.EncodeToString(hexsum)
+					}
+					pkgLines = append(pkgLines, fmt.Sprintf("Z:%s", checksum))
+				}
 			}
 		}
 	}

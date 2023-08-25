@@ -75,10 +75,15 @@ func TestAddInstalledPackage(t *testing.T) {
 		BuildTime: time.Now(),
 	}
 	newFiles := []tar.Header{
-		{Name: "usr/", Typeflag: tar.TypeDir, Mode: 0o755},                         // standard perms should not generate extra perms line
-		{Name: "usr/foo/", Typeflag: tar.TypeDir, Mode: 0o700},                     // should generate extra M: perms line
+		{Name: "usr", Typeflag: tar.TypeDir, Mode: 0o755},                          // standard perms should not generate extra perms line
+		{Name: "usr/foo", Typeflag: tar.TypeDir, Mode: 0o700},                      // should generate extra M: perms line
 		{Name: "usr/foo/testfile", Typeflag: tar.TypeReg, Size: 1234, Mode: 0o644}, // standard perms should not generate extra perms line
 		{Name: "usr/foo/oddfile", Typeflag: tar.TypeReg, Size: 1234, Mode: 0o600},  // should generate extra a: perms line
+		// Test that we correctly convert from hex to Q1-prefixed sum.
+		{Name: "usr/foo/withchecksum", Typeflag: tar.TypeReg, Size: 1234, Mode: 0o600, PAXRecords: map[string]string{
+			// A random checksum in the hex representation.
+			paxRecordsChecksumKey: "91abf197227d2fe71d016f4ccb68b16c9c9b2768",
+		}}, // should generate extra a: perms line
 	}
 	// addInstalledPackage(pkg *repository.Package, files []tar.Header) error
 	err = a.addInstalledPackage(newPkg, newFiles)
@@ -90,6 +95,14 @@ func TestAddInstalledPackage(t *testing.T) {
 	lastPkg := pkgs[len(pkgs)-1]
 	require.Equal(t, newPkg.Name, lastPkg.Name, "expected package name %s, got %s", newPkg.Name, lastPkg.Name)
 	require.Equal(t, newPkg.Version, lastPkg.Version, "expected package version %s, got %s", newPkg.Version, lastPkg.Version)
+
+	installedFile, err := a.fs.ReadFile(installedFilePath)
+	require.NoError(t, err)
+
+	// The same random checksum from before, converted to what we expect.
+	want := "Z:Q1kavxlyJ9L+cdAW9My2ixbJybJ2g="
+	str := string(installedFile)
+	require.Contains(t, str, want)
 }
 
 func TestIsInstalledPackage(t *testing.T) {
