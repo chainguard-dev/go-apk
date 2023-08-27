@@ -232,13 +232,16 @@ func (c *Context) writeTar(ctx context.Context, tw *tar.Writer, fsys fs.FS, user
 			}
 		}
 
-		xfs, ok := fsys.(apkfs.XattrFS)
-		if ok {
-			xattrs, err := xfs.ListXattrs(path)
-			// we can ignore errors
-			if err == nil && xattrs != nil {
-				for name, value := range xattrs {
-					header.PAXRecords[xattrTarPAXRecordsPrefix+name] = string(value)
+		// only capture xattrs for real objects in the FS
+		if header.Typeflag == tar.TypeReg || header.Typeflag == tar.TypeDir {
+			xfs, ok := fsys.(apkfs.XattrFS)
+			if ok {
+				xattrs, err := xfs.ListXattrs(path)
+				// we can ignore errors
+				if err == nil && xattrs != nil {
+					for name, value := range xattrs {
+						header.PAXRecords[xattrTarPAXRecordsPrefix+name] = string(value)
+					}
 				}
 			}
 		}

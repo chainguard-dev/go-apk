@@ -221,6 +221,18 @@ func (a *APK) installAPKFiles(ctx context.Context, in io.Reader, origin, replace
 			}
 			// apk installed db uses this format
 			header.PAXRecords[paxRecordsChecksumKey] = fmt.Sprintf("Q1%s", base64.StdEncoding.EncodeToString(checksum))
+
+			// xattrs
+			for k, v := range header.PAXRecords {
+				if !strings.HasPrefix(k, xattrTarPAXRecordsPrefix) {
+					continue
+				}
+				attrName := strings.TrimPrefix(k, xattrTarPAXRecordsPrefix)
+				if err := a.fs.SetXattr(header.Name, attrName, []byte(v)); err != nil {
+					return nil, fmt.Errorf("error setting xattr %s on %s: %w", attrName, header.Name, err)
+				}
+			}
+
 		case tar.TypeSymlink:
 			// some underlying filesystems and some memfs that we use in tests do not support symlinks.
 			// attempt it, and if it fails, just copy it.
@@ -237,17 +249,6 @@ func (a *APK) installAPKFiles(ctx context.Context, in io.Reader, origin, replace
 			}
 		default:
 			return nil, fmt.Errorf("unsupported file type %s %v", header.Name, header.Typeflag)
-		}
-
-		// xattrs
-		for k, v := range header.PAXRecords {
-			if !strings.HasPrefix(k, xattrTarPAXRecordsPrefix) {
-				continue
-			}
-			attrName := strings.TrimPrefix(k, xattrTarPAXRecordsPrefix)
-			if err := a.fs.SetXattr(header.Name, attrName, []byte(v)); err != nil {
-				return nil, fmt.Errorf("error setting xattr %s on %s: %w", attrName, header.Name, err)
-			}
 		}
 
 		files = append(files, *header)
