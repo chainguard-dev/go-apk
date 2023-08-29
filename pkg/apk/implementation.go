@@ -40,6 +40,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
+	"github.com/chainguard-dev/go-apk/internal/tarfs"
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 	logger "github.com/chainguard-dev/go-apk/pkg/logger"
 	"github.com/hashicorp/go-retryablehttp"
@@ -742,6 +743,10 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	}
 
 	exp.tarFile = strings.TrimSuffix(exp.PackageFile, ".gz")
+	exp.tarfs, err = tarfs.New(exp.PackageData)
+	if err != nil {
+		return nil, err
+	}
 
 	return &exp, nil
 }
@@ -861,6 +866,10 @@ func (a *APK) fetchPackage(ctx context.Context, pkg *repository.RepositoryPackag
 	}
 }
 
+type writeHeaderer interface {
+	WriteHeader(hdr tar.Header, tfs fs.FS, offset int64, pkg *repository.Package) error
+}
+
 // installPackage installs a single package and updates installed db.
 func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPackage, expanded *APKExpanded, sourceDateEpoch *time.Time) error {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
@@ -870,15 +879,27 @@ func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPack
 
 	defer expanded.Close()
 
-	packageData, err := expanded.PackageData()
-	if err != nil {
-		return fmt.Errorf("opening package file %q: %w", expanded.PackageFile, err)
-	}
-	defer packageData.Close()
+	var (
+		installedFiles []tar.Header
+		err            error
+	)
 
-	installedFiles, err := a.installAPKFiles(ctx, packageData, pkg.Origin, pkg.Replaces)
-	if err != nil {
-		return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
+	if wh, ok := a.fs.(writeHeaderer); ok {
+		installedFiles, err = a.lazilyInstallAPKFiles(ctx, wh, expanded.tarfs, pkg.Package)
+		if err != nil {
+			return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
+		}
+	} else {
+		packageData, err := expanded.PackageData()
+		if err != nil {
+			return fmt.Errorf("opening package file %q: %w", expanded.PackageFile, err)
+		}
+		defer packageData.Close()
+
+		installedFiles, err = a.installAPKFiles(ctx, packageData, pkg.Origin, pkg.Replaces)
+		if err != nil {
+			return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
+		}
 	}
 
 	// update the scripts.tar
