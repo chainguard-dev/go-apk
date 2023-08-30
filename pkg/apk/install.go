@@ -315,7 +315,7 @@ func (a *APK) lazilyInstallAPKFiles(ctx context.Context, wh writeHeaderer, tf *t
 		// whatever it is now, it is in the data section
 		startedDataSection = true
 
-		if err := wh.WriteHeader(header.Header, tf, header.Offset, pkg); err != nil {
+		if err := wh.WriteHeader(header.Header, tf, pkg); err != nil {
 			return nil, err
 		}
 

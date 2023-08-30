@@ -867,7 +867,7 @@ func (a *APK) fetchPackage(ctx context.Context, pkg *repository.RepositoryPackag
 }
 
 type writeHeaderer interface {
-	WriteHeader(hdr tar.Header, tfs fs.FS, offset int64, pkg *repository.Package) error
+	WriteHeader(hdr tar.Header, tfs fs.FS, pkg *repository.Package) error
 }
 
 // installPackage installs a single package and updates installed db.
