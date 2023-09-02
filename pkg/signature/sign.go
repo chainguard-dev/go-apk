@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/klauspost/compress/gzip"
@@ -34,7 +33,12 @@ import (
 	"github.com/chainguard-dev/go-apk/pkg/tarball"
 )
 
-func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, indexFile string) error {
+type IndexSigner interface {
+	Sign(digest []byte) ([]byte, error)
+	SignatureName() string
+}
+
+func SignIndex(ctx context.Context, logger logger.Logger, indexSigner IndexSigner, indexFile string) error {
 	is, err := indexIsAlreadySigned(indexFile)
 	if err != nil {
 		return err
@@ -44,14 +48,14 @@ func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, ind
 		return nil
 	}
 
-	logger.Printf("signing index %s with key %s", indexFile, signingKey)
+	logger.Printf("signing index %s with key %s", indexFile, indexSigner.SignatureName())
 
 	indexData, indexDigest, err := ReadAndHashIndexFile(indexFile)
 	if err != nil {
 		return err
 	}
 
-	sigData, err := RSASignSHA1Digest(indexDigest, signingKey, "")
+	sigData, err := indexSigner.Sign(indexDigest)
 	if err != nil {
 		return fmt.Errorf("unable to sign index: %w", err)
 	}
@@ -59,7 +63,7 @@ func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, ind
 	logger.Printf("appending signature to index %s", indexFile)
 
 	sigFS := memfs.New()
-	if err := sigFS.WriteFile(fmt.Sprintf(".SIGN.RSA.%s.pub", filepath.Base(signingKey)), sigData, 0644); err != nil {
+	if err := sigFS.WriteFile(fmt.Sprintf("%s", indexSigner.SignatureName()), sigData, 0644); err != nil {
 		return fmt.Errorf("unable to append signature: %w", err)
 	}
 
@@ -95,7 +99,7 @@ func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, ind
 		return fmt.Errorf("unable to write index data: %w", err)
 	}
 
-	logger.Printf("signed index %s with key %s", indexFile, signingKey)
+	logger.Printf("signed index %s with key %s", indexFile, indexSigner.SignatureName())
 
 	return nil
 }
