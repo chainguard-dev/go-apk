@@ -512,11 +512,16 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 				return gctx.Err()
 			case <-ch:
 				exp := expanded[i]
-				if exp == nil {
-					continue
+				pkg := allpkgs[i]
+
+				isInstalled, err := a.isInstalledPackage(pkg.Name)
+				if err != nil {
+					return fmt.Errorf("error checking if package %s is installed: %w", pkg.Name, err)
 				}
 
-				pkg := allpkgs[i]
+				if isInstalled {
+					continue
+				}
 
 				if err := a.installPackage(gctx, pkg, exp, sourceDateEpoch); err != nil {
 					return fmt.Errorf("installing %s: %w", pkg.Name, err)
@@ -533,14 +538,6 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 		i, pkg := i, pkg
 
 		g.Go(func() error {
-			isInstalled, err := a.isInstalledPackage(pkg.Name)
-			if err != nil {
-				return fmt.Errorf("error checking if package %s is installed: %w", pkg.Name, err)
-			}
-			if isInstalled {
-				return nil
-			}
-
 			exp, err := a.expandPackage(gctx, pkg)
 			if err != nil {
 				return fmt.Errorf("expanding %s: %w", pkg.Name, err)
