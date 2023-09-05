@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
+	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.lsp.dev/uri"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

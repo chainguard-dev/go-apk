@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
+	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
 func TestParseVersion(t *testing.T) {
