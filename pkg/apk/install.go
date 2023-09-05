@@ -27,7 +27,7 @@ import (
 	"os"
 	"strings"
 
-	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
+	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.opentelemetry.io/otel"
 
 	"github.com/chainguard-dev/go-apk/internal/tarfs"

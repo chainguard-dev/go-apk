@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"strings"
 
-	"gitlab.alpinelinux.org/alpine/go/pkg/repository"
+	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
 // versionRegex how to parse versions.
