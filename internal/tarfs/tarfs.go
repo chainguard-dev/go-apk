@@ -18,10 +18,8 @@ import (
 	"archive/tar"
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
-	"sync"
 )
 
 type Entry struct {
@@ -45,14 +43,13 @@ func (f *File) Read(p []byte) (int, error) {
 }
 
 func (f *File) Close() error {
-	f.fsys.readers.Put(f.handle)
-	return nil
+	return f.handle.Close()
 }
 
 type FS struct {
-	readers sync.Pool
-	files   []Entry
-	index   map[string]int
+	open  func() (io.ReadSeekCloser, error)
+	files []Entry
+	index map[string]int
 }
 
 // Open implements fs.FS.
@@ -86,18 +83,17 @@ func (fsys *FS) Entries() []Entry {
 }
 
 func (fsys *FS) OpenAt(offset int64) (io.ReadSeekCloser, error) {
-	v := fsys.readers.Get()
-	if err, ok := v.(error); ok {
+	// TODO: We can use ReadAt to avoid opening the file multiple times.
+	f, err := fsys.open()
+	if err != nil {
 		return nil, err
 	}
-	if rsc, ok := v.(io.ReadSeekCloser); ok {
-		if _, err := rsc.Seek(offset, io.SeekStart); err != nil {
-			return nil, err
-		}
-		return rsc, nil
+
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("unexpected type: %T", v)
+	return f, nil
 }
 
 type countReader struct {
@@ -113,15 +109,7 @@ func (cr *countReader) Read(p []byte) (int, error) {
 
 func New(open func() (io.ReadSeekCloser, error)) (*FS, error) {
 	fsys := &FS{
-		readers: sync.Pool{
-			New: func() any {
-				r, err := open()
-				if err != nil {
-					return err
-				}
-				return r
-			},
-		},
+		open:  open,
 		files: []Entry{},
 		index: map[string]int{},
 	}
@@ -131,6 +119,7 @@ func New(open func() (io.ReadSeekCloser, error)) (*FS, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
 
 	cr := &countReader{bufio.NewReaderSize(r, 1<<20), 0}
 	tr := tar.NewReader(cr)
@@ -148,8 +137,6 @@ func New(open func() (io.ReadSeekCloser, error)) (*FS, error) {
 			Offset: cr.n,
 		})
 	}
-
-	fsys.readers.Put(r)
 
 	return fsys, nil
 }
