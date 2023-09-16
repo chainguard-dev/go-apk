@@ -428,7 +428,7 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*repository.Reposit
 
 	// to fix the world, we need to:
 	// 1. Get the apkIndexes for each repository for the target arch
-	indexes, err := a.getRepositoryIndexes(ctx, a.ignoreSignatures)
+	indexes, err := a.GetRepositoryIndexes(ctx, a.ignoreSignatures)
 	if err != nil {
 		return toInstall, conflicts, fmt.Errorf("error getting repository indexes: %w", err)
 	}
@@ -773,7 +773,7 @@ func (a *APK) expandPackage(ctx context.Context, pkg *repository.RepositoryPacka
 		}
 	}
 
-	rc, err := a.fetchPackage(ctx, pkg)
+	rc, err := a.FetchPackage(ctx, pkg)
 	if err != nil {
 		return nil, fmt.Errorf("fetching package %q: %w", pkg.Name, err)
 	}
@@ -811,7 +811,7 @@ func packageAsURL(pkg *repository.RepositoryPackage) (*url.URL, error) {
 	return url.Parse(string(asURI))
 }
 
-func (a *APK) fetchPackage(ctx context.Context, pkg *repository.RepositoryPackage) (io.ReadCloser, error) {
+func (a *APK) FetchPackage(ctx context.Context, pkg *repository.RepositoryPackage) (io.ReadCloser, error) {
 	a.logger.Debugf("fetching %s (%s)", pkg.Name, pkg.Version)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "fetchPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))

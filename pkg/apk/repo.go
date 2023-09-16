@@ -124,9 +124,9 @@ func (a *APK) GetRepositories() (repos []string, err error) {
 	return
 }
 
-// getRepositoryIndexes returns the indexes for the repositories in the specified root.
+// GetRepositoryIndexes returns the indexes for the repositories in the specified root.
 // The signatures for each index are verified unless ignoreSignatures is set to true.
-func (a *APK) getRepositoryIndexes(ctx context.Context, ignoreSignatures bool) ([]NamedIndex, error) {
+func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) ([]NamedIndex, error) {
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "getRepositoryIndexes")
 	defer span.End()
 

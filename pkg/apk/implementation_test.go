@@ -310,7 +310,7 @@ func TestFetchPackage(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
-		_, err := a.fetchPackage(ctx, pkg)
+		_, err := a.FetchPackage(ctx, pkg)
 		require.NoErrorf(t, err, "unable to install package")
 	})
 	t.Run("cache miss no network", func(t *testing.T) {
@@ -321,7 +321,7 @@ func TestFetchPackage(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{fail: true},
 		})
-		_, err := a.fetchPackage(ctx, pkg)
+		_, err := a.FetchPackage(ctx, pkg)
 		require.Error(t, err, "should fail when no cache and no network")
 	})
 	t.Run("cache miss network should fill cache", func(t *testing.T) {
@@ -384,7 +384,7 @@ func TestFetchPackage(t *testing.T) {
 			// use a different root, so we get a different file
 			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
-		_, err = a.fetchPackage(ctx, pkg)
+		_, err = a.FetchPackage(ctx, pkg)
 		require.NoErrorf(t, err, "unable to install pkg")
 		// check that the package file is in place
 		_, err = os.Stat(cacheApkFile)
@@ -414,7 +414,7 @@ func TestFetchPackage(t *testing.T) {
 			// use a different root, so we get a different file
 			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
-		_, err = a.fetchPackage(ctx, pkg)
+		_, err = a.FetchPackage(ctx, pkg)
 		require.NoErrorf(t, err, "unable to install pkg")
 		// check that the package file is in place
 		_, err = os.Stat(cacheApkFile)
@@ -444,7 +444,7 @@ func TestFetchPackage(t *testing.T) {
 			// use a different root, so we get a different file
 			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "abcdefg"}}},
 		})
-		_, err = a.fetchPackage(ctx, pkg)
+		_, err = a.FetchPackage(ctx, pkg)
 		require.NoErrorf(t, err, "unable to install pkg")
 		// check that the package file is in place
 		_, err = os.Stat(cacheApkFile)
