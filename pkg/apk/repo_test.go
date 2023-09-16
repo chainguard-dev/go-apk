@@ -108,7 +108,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
-		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+		indexes, err := a.GetRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 	})
@@ -120,7 +120,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{fail: true},
 		})
-		_, err := a.getRepositoryIndexes(context.TODO(), false)
+		_, err := a.GetRepositoryIndexes(context.TODO(), false)
 		require.Error(t, err, "should fail when no cache and no network")
 	})
 	t.Run("we can fetch, but do not cache indices without etag", func(t *testing.T) {
@@ -132,7 +132,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true},
 		})
-		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+		indexes, err := a.GetRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 
@@ -160,7 +160,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 				},
 			},
 		})
-		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+		indexes, err := a.GetRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// check that the contents are the same
@@ -181,7 +181,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 				requireBasicAuth: true,
 			},
 		})
-		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+		indexes, err := a.GetRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 	})
@@ -197,7 +197,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
 		// Use the client to fill the cache.
-		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+		indexes, err := a.GetRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// Capture the initial index.
@@ -208,7 +208,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
-		indexes, err = a.getRepositoryIndexes(context.TODO(), false)
+		indexes, err = a.GetRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// Capture the resulting index.
@@ -229,7 +229,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 			Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag}}},
 		})
 		// Use the client to fill the cache.
-		indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+		indexes, err := a.GetRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// Capture the initial index.
@@ -241,7 +241,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		a.SetClient(&http.Client{
 			Transport: &testLocalTransport{root: testAlternatePkgDir, basenameOnly: true, headers: map[string][]string{http.CanonicalHeaderKey("etag"): {testEtag + "change"}}},
 		})
-		indexes, err = a.getRepositoryIndexes(context.TODO(), false)
+		indexes, err = a.GetRepositoryIndexes(context.TODO(), false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 		// Capture the resulting index.
@@ -266,7 +266,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 						headers:      map[string][]string{http.CanonicalHeaderKey("etag"): {fmt.Sprint(i)}},
 					},
 				})
-				indexes, err := a.getRepositoryIndexes(context.TODO(), false)
+				indexes, err := a.GetRepositoryIndexes(context.TODO(), false)
 				require.NoErrorf(t, err, "unable to get indexes")
 				require.Greater(t, len(indexes), 0, "no indexes found")
 				return nil
