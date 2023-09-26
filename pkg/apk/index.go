@@ -208,15 +208,14 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 			if !verified {
 				return nil, fmt.Errorf("no key found to verify signature for keyfile %s; tried all other keys as well", matches[1])
 			}
-
-			// with a valid signature, convert it to an ApkIndex
-			index, err := repository.IndexFromArchive(io.NopCloser(bytes.NewReader(b)))
-			if err != nil {
-				return nil, fmt.Errorf("unable to read convert repository index bytes to index struct at %s: %w", u, err)
-			}
-			repoRef := repository.Repository{Uri: repoBase}
-			indexes = append(indexes, NewNamedRepositoryWithIndex(repoName, repoRef.WithIndex(index)))
 		}
+		// with a valid signature, convert it to an ApkIndex
+		index, err := repository.IndexFromArchive(io.NopCloser(bytes.NewReader(b)))
+		if err != nil {
+			return nil, fmt.Errorf("unable to read convert repository index bytes to index struct at %s: %w", u, err)
+		}
+		repoRef := repository.Repository{Uri: repoBase}
+		indexes = append(indexes, NewNamedRepositoryWithIndex(repoName, repoRef.WithIndex(index)))
 	}
 	return indexes, nil
 }
