@@ -166,7 +166,9 @@ func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) (
 	}
 	httpClient := a.client
 	if httpClient == nil {
-		httpClient = retryablehttp.NewClient().StandardClient()
+		newClient := retryablehttp.NewClient()
+		newClient.Logger = nil
+		httpClient = newClient.StandardClient()
 	}
 	if a.cache != nil {
 		httpClient = a.cache.client(httpClient, true)

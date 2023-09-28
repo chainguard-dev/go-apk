@@ -372,7 +372,9 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 			case "https": //nolint:goconst
 				client := a.client
 				if client == nil {
-					client = retryablehttp.NewClient().StandardClient()
+					newClient := retryablehttp.NewClient()
+					newClient.Logger = nil
+					client = newClient.StandardClient()
 				}
 				if a.cache != nil {
 					client = a.cache.client(client, true)
@@ -574,7 +576,9 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 	u := alpineReleasesURL
 	client := a.client
 	if client == nil {
-		client = retryablehttp.NewClient().StandardClient()
+		newClient := retryablehttp.NewClient()
+		newClient.Logger = nil
+		client = newClient.StandardClient()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -837,7 +841,9 @@ func (a *APK) FetchPackage(ctx context.Context, pkg *repository.RepositoryPackag
 	case "https":
 		client := a.client
 		if client == nil {
-			client = retryablehttp.NewClient().StandardClient()
+			newClient := retryablehttp.NewClient()
+			newClient.Logger = nil
+			client = newClient.StandardClient()
 		}
 		if a.cache != nil {
 			client = a.cache.client(client, false)

@@ -106,7 +106,9 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 		case "https":
 			client := opts.httpClient
 			if client == nil {
-				client = retryablehttp.NewClient().StandardClient()
+				newClient := retryablehttp.NewClient()
+				newClient.Logger = nil
+				client = newClient.StandardClient()
 			}
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, asURL.String(), nil)
 			if err != nil {
