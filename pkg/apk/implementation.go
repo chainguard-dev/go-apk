@@ -457,6 +457,62 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*repository.Reposit
 	return
 }
 
+func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
+	a.logger.Infof("synchronizing with desired apk world")
+
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
+	defer span.End()
+
+	allpkgs, _, err := a.ResolveWorld(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error getting package dependencies: %w", err)
+	}
+
+	// TODO: Consider making this configurable option.
+	jobs := runtime.GOMAXPROCS(0)
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(jobs + 1)
+
+	resolved := make([]*APKResolved, len(allpkgs))
+
+	// A slice of pseudo-promises that get closed when expanded[i] is ready.
+	done := make([]chan struct{}, len(allpkgs))
+	for i := range allpkgs {
+		done[i] = make(chan struct{})
+	}
+
+	// Meanwhile, concurrently fetch and expand all our APKs.
+	// We signal they are ready to be installed by closing done[i].
+	for i, pkg := range allpkgs {
+		i, pkg := i, pkg
+
+		g.Go(func() error {
+			r, err := a.FetchPackage(gctx, pkg)
+			if err != nil {
+				return fmt.Errorf("fetching %s: %w", pkg.Name, err)
+			}
+			res, err := ResolveApk(gctx, r)
+			if err != nil {
+				return fmt.Errorf("resolving %s: %w", pkg.Name, err)
+			}
+
+			res.Package = pkg
+			resolved[i] = res
+
+			close(done[i])
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, fmt.Errorf("installing packages: %w", err)
+	}
+
+	return resolved, nil
+}
+
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
 func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error {
 	/*
