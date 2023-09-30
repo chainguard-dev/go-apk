@@ -4,7 +4,7 @@
 // this duplicate file goes away!
 
 //nolint:all
-package apk
+package expandapk
 
 import (
 	"archive/tar"
@@ -50,10 +50,10 @@ type APKExpanded struct {
 	PackageFile string
 
 	// The package data filename in .tar format.
-	tarFile string
+	TarFile string
 
-	// Exposes tarFile as an indexed FS implementation.
-	tarfs *tarfs.FS
+	// Exposes TarFile as an indexed FS implementation.
+	TarFS *tarfs.FS
 
 	ControlHash []byte
 	PackageHash []byte
@@ -62,7 +62,7 @@ type APKExpanded struct {
 const meg = 1 << 20
 
 func (a *APKExpanded) PackageData() (io.ReadSeekCloser, error) {
-	uf, err := os.Open(a.tarFile)
+	uf, err := os.Open(a.TarFile)
 	if err == nil {
 		return uf, nil
 	} else if !os.IsNotExist(err) {
@@ -87,9 +87,9 @@ func (a *APKExpanded) PackageData() (io.ReadSeekCloser, error) {
 		return nil, fmt.Errorf("parsing %q: %w", a.PackageFile, err)
 	}
 
-	uf, err = os.Create(a.tarFile)
+	uf, err = os.Create(a.TarFile)
 	if err != nil {
-		return nil, fmt.Errorf("opening tar file %q: %w", a.tarFile, err)
+		return nil, fmt.Errorf("opening tar file %q: %w", a.TarFile, err)
 	}
 
 	buf := make([]byte, bufSize)
@@ -98,10 +98,10 @@ func (a *APKExpanded) PackageData() (io.ReadSeekCloser, error) {
 	}
 
 	if err := uf.Close(); err != nil {
-		return nil, fmt.Errorf("closing %q: %w", a.tarFile, err)
+		return nil, fmt.Errorf("closing %q: %w", a.TarFile, err)
 	}
 
-	return os.Open(a.tarFile)
+	return os.Open(a.TarFile)
 }
 
 func (a *APKExpanded) APK() (io.ReadCloser, error) {
@@ -422,12 +422,12 @@ func ExpandApk(ctx context.Context, source io.Reader, cacheDir string) (*APKExpa
 		expanded.SignatureFile = gzipStreams[0]
 	}
 
-	expanded.tarFile = strings.TrimSuffix(expanded.PackageFile, ".gz")
+	expanded.TarFile = strings.TrimSuffix(expanded.PackageFile, ".gz")
 
 	// TODO: We could overlap this with checkSums.
-	expanded.tarfs, err = tarfs.New(expanded.PackageData)
+	expanded.TarFS, err = tarfs.New(expanded.PackageData)
 	if err != nil {
-		return nil, fmt.Errorf("indexing %q: %w", expanded.tarFile, err)
+		return nil, fmt.Errorf("indexing %q: %w", expanded.TarFile, err)
 	}
 
 	return &expanded, nil
