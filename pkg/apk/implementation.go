@@ -32,6 +32,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chainguard-dev/go-apk/pkg/expandapk"
+
 	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.lsp.dev/uri"
 	"go.opentelemetry.io/otel"
@@ -261,12 +263,12 @@ func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
 
 	// add scripts.tar with nothing in it
 	scriptsTarPerms := 0o644
-	tarfile, err := a.fs.OpenFile(scriptsFilePath, os.O_CREATE|os.O_WRONLY, fs.FileMode(scriptsTarPerms))
+	TarFile, err := a.fs.OpenFile(scriptsFilePath, os.O_CREATE|os.O_WRONLY, fs.FileMode(scriptsTarPerms))
 	if err != nil {
 		return fmt.Errorf("could not create tarball file '%s', got error '%w'", scriptsFilePath, err)
 	}
-	defer tarfile.Close()
-	tarWriter := tar.NewWriter(tarfile)
+	defer TarFile.Close()
+	tarWriter := tar.NewWriter(TarFile)
 	defer tarWriter.Close()
 
 	// nothing to add to it; scripts.tar should be empty
@@ -492,7 +494,7 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(jobs + 1)
 
-	expanded := make([]*APKExpanded, len(allpkgs))
+	expanded := make([]*expandapk.APKExpanded, len(allpkgs))
 
 	// A slice of pseudo-promises that get closed when expanded[i] is ready.
 	done := make([]chan struct{}, len(allpkgs))
@@ -637,7 +639,7 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 	return nil
 }
 
-func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackage, exp *APKExpanded, cacheDir string) (*APKExpanded, error) {
+func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackage, exp *expandapk.APKExpanded, cacheDir string) (*expandapk.APKExpanded, error) {
 	_, span := otel.Tracer("go-apk").Start(ctx, "cachePackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()
 
@@ -672,15 +674,15 @@ func (a *APK) cachePackage(ctx context.Context, pkg *repository.RepositoryPackag
 	exp.PackageFile = datDst
 
 	tarDst := strings.TrimSuffix(exp.PackageFile, ".gz")
-	if err := os.Rename(exp.tarFile, tarDst); err != nil {
+	if err := os.Rename(exp.TarFile, tarDst); err != nil {
 		return nil, fmt.Errorf("renaming control file: %w", err)
 	}
-	exp.tarFile = tarDst
+	exp.TarFile = tarDst
 
 	return exp, nil
 }
 
-func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPackage, cacheDir string) (*APKExpanded, error) {
+func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPackage, cacheDir string) (*expandapk.APKExpanded, error) {
 	_, span := otel.Tracer("go-apk").Start(ctx, "cachedPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()
 
@@ -696,7 +698,7 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 
 	pkgHexSum := hex.EncodeToString(checksum)
 
-	exp := APKExpanded{}
+	exp := expandapk.APKExpanded{}
 
 	ctl := filepath.Join(cacheDir, pkgHexSum+".ctl.tar.gz")
 	cf, err := os.Stat(ctl)
@@ -739,8 +741,8 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 		return nil, err
 	}
 
-	exp.tarFile = strings.TrimSuffix(exp.PackageFile, ".gz")
-	exp.tarfs, err = tarfs.New(exp.PackageData)
+	exp.TarFile = strings.TrimSuffix(exp.PackageFile, ".gz")
+	exp.TarFS, err = tarfs.New(exp.PackageData)
 	if err != nil {
 		return nil, err
 	}
@@ -748,7 +750,7 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	return &exp, nil
 }
 
-func (a *APK) expandPackage(ctx context.Context, pkg *repository.RepositoryPackage) (*APKExpanded, error) {
+func (a *APK) expandPackage(ctx context.Context, pkg *repository.RepositoryPackage) (*expandapk.APKExpanded, error) {
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "expandPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()
 
@@ -779,7 +781,7 @@ func (a *APK) expandPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	}
 	defer rc.Close()
 
-	exp, err := ExpandApk(ctx, rc, cacheDir)
+	exp, err := expandapk.ExpandApk(ctx, rc, cacheDir)
 	if err != nil {
 		return nil, fmt.Errorf("expanding %s: %w", pkg.Name, err)
 	}
@@ -868,7 +870,7 @@ type writeHeaderer interface {
 }
 
 // installPackage installs a single package and updates installed db.
-func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPackage, expanded *APKExpanded, sourceDateEpoch *time.Time) error {
+func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPackage, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) error {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "installPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
@@ -882,7 +884,7 @@ func (a *APK) installPackage(ctx context.Context, pkg *repository.RepositoryPack
 	)
 
 	if wh, ok := a.fs.(writeHeaderer); ok {
-		installedFiles, err = a.lazilyInstallAPKFiles(ctx, wh, expanded.tarfs, pkg.Package)
+		installedFiles, err = a.lazilyInstallAPKFiles(ctx, wh, expanded.TarFS, pkg.Package)
 		if err != nil {
 			return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 		}
