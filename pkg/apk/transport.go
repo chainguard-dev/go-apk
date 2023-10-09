@@ -91,7 +91,11 @@ func (r *rangeRetryReader) reset(oerr error) (*http.Response, error) {
 			}
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
-		return resp, fmt.Errorf("retrying %w: %s %s (Range: %s): unexpected status code: %d", oerr, req.Method, req.URL.String(), rangeHeader, resp.StatusCode)
+		if oerr != nil {
+			return resp, fmt.Errorf("retrying %w: %s %s (Range: %s): unexpected status code: %d", oerr, req.Method, req.URL.String(), rangeHeader, resp.StatusCode)
+		}
+
+		return resp, fmt.Errorf("%s %s (Range: %s): unexpected status code: %d", req.Method, req.URL.String(), rangeHeader, resp.StatusCode)
 	}
 
 	r.body = resp.Body
