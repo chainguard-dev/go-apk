@@ -30,7 +30,7 @@ import (
 // This is terrible but simpler than plumbing around a cache for now.
 // We will assume that for a given process, we want to reuse etag values.
 // Doing this cuts down on the number of requests we send for index and keys.
-var globalCache = &etagCache{}
+var globalEtagCache = &etagCache{}
 
 type etagResp struct {
 	resp      *http.Response
@@ -225,7 +225,7 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 		}, nil
 	}
 
-	return globalCache.get(t, request, cacheFile)
+	return globalEtagCache.get(t, request, cacheFile)
 }
 
 func cacheDirFromFile(cacheFile string) string {
