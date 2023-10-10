@@ -22,9 +22,114 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gitlab.alpinelinux.org/alpine/go/repository"
 )
+
+// This is terrible but simpler than plumbing around a cache for now.
+// We will assume that for a given process, we want to reuse etag values.
+// Doing this cuts down on the number of requests we send for index and keys.
+var globalCache = &etagCache{}
+
+type etagResp struct {
+	resp      *http.Response
+	err       error
+	cacheFile string
+}
+
+type etagCache struct {
+	// url -> *sync.Once
+	etags sync.Map
+
+	// url -> etagResp
+	resps sync.Map
+}
+
+// get dedupes incoming etag-based requests by url (using a sync.Map[string]sync.Once) and stores the results
+// in a sync.Map[string]etagResp. If we request the same URL multiple times, we will only ever reach out to
+// the internet for the first once and reuse the results for all subsequent calls (unless the response does
+// not have an etag).
+func (e *etagCache) get(t *cacheTransport, request *http.Request, cacheFile string) (*http.Response, error) {
+	url := request.URL.String()
+
+	// Do all the expensive things inside the once.
+	once, _ := e.etags.LoadOrStore(url, &sync.Once{})
+	once.(*sync.Once).Do(func() {
+		resp, rerr := t.wrapped.Head(url)
+		if resp != nil {
+			// We don't expect any body from a HEAD so just always close it to appease the linter.
+			resp.Body.Close()
+		}
+		if rerr != nil || resp.StatusCode != 200 {
+			e.resps.Store(url, etagResp{
+				resp: resp,
+				err:  rerr,
+			})
+			return
+		}
+
+		initialEtag, ok := etagFromResponse(resp)
+		if !ok {
+			return
+		}
+
+		// We simulate content-based addressing with the etag values using an .etag
+		// file extension.
+		etagFile := cacheFileFromEtag(cacheFile, initialEtag)
+		if _, err := os.Open(etagFile); err == nil {
+			e.resps.Store(url, etagResp{
+				cacheFile: etagFile,
+			})
+			return
+		}
+
+		// Only download the index once.
+		etagFile, err := t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
+			// On the etag path, use the etag from the actual response to
+			// compute the final file name.
+			finalEtag, ok := etagFromResponse(r)
+			if !ok {
+				return "", fmt.Errorf("GET response did not contain an etag, but HEAD returned %q", initialEtag)
+			}
+
+			return cacheFileFromEtag(cacheFile, finalEtag), nil
+		})
+		e.resps.Store(url, etagResp{
+			err:       err,
+			cacheFile: etagFile,
+		})
+	})
+
+	v, ok := e.resps.Load(url)
+	if !ok {
+		// If the server doesn't return etags, and we require them,
+		// then do not cache.
+		return t.wrapped.Do(request)
+	}
+	resp := v.(etagResp)
+
+	// If we didn't manage to cache it, return the response and/or error.
+	if resp.cacheFile == "" {
+		return resp.resp, resp.err
+	}
+
+	f, err := os.Open(resp.cacheFile)
+	if err != nil {
+		return nil, fmt.Errorf("open(%q): %w", resp.cacheFile, err)
+	}
+
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat(%q): %w", resp.cacheFile, err)
+	}
+
+	return &http.Response{
+		StatusCode:    http.StatusOK,
+		Body:          f,
+		ContentLength: fi.Size(),
+	}, nil
+}
 
 // cache
 type cache struct {
@@ -120,37 +225,7 @@ func (t *cacheTransport) RoundTrip(request *http.Request) (*http.Response, error
 		}, nil
 	}
 
-	resp, err := t.wrapped.Head(request.URL.String())
-	if err != nil || resp.StatusCode != 200 {
-		return resp, err
-	}
-	initialEtag, ok := etagFromResponse(resp)
-	if !ok {
-		// If the server doesn't return etags, and we require them,
-		// then do not cache.
-		return t.wrapped.Do(request)
-	}
-	// We simulate content-based addressing with the etag values using an .etag
-	// file extension.
-	etagFile := cacheFileFromEtag(cacheFile, initialEtag)
-	f, err := os.Open(etagFile)
-	if err != nil {
-		return t.retrieveAndSaveFile(request, func(r *http.Response) (string, error) {
-			// On the etag path, use the etag from the actual response to
-			// compute the final file name.
-			finalEtag, ok := etagFromResponse(r)
-			if !ok {
-				return "", fmt.Errorf("GET response did not contain an etag, but HEAD returned %q", initialEtag)
-			}
-
-			return cacheFileFromEtag(cacheFile, finalEtag), nil
-		})
-	}
-	return &http.Response{
-		StatusCode:    http.StatusOK,
-		Body:          f,
-		ContentLength: resp.ContentLength,
-	}, nil
+	return globalCache.get(t, request, cacheFile)
 }
 
 func cacheDirFromFile(cacheFile string) string {
@@ -186,54 +261,49 @@ func etagFromResponse(resp *http.Response) (string, bool) {
 
 type cachePlacer func(*http.Response) (string, error)
 
-func (t *cacheTransport) retrieveAndSaveFile(request *http.Request, cp cachePlacer) (*http.Response, error) {
+func (t *cacheTransport) retrieveAndSaveFile(request *http.Request, cp cachePlacer) (string, error) {
 	if t.wrapped == nil {
-		return nil, fmt.Errorf("wrapped client is nil")
+		return "", fmt.Errorf("wrapped client is nil")
 	}
 	resp, err := t.wrapped.Do(request)
 	if err != nil || resp.StatusCode != 200 {
-		return resp, err
+		return "", err
 	}
 
 	// Determine the file we will caching stuff in based on the URL/response
 	cacheFile, err := cp(resp)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	cacheDir := filepath.Dir(cacheFile)
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return nil, fmt.Errorf("unable to create cache directory: %w", err)
+		return "", fmt.Errorf("unable to create cache directory: %w", err)
 	}
 
 	// Stream the request response to a temporary file within the final cache
 	// directory
 	tmp, err := os.CreateTemp(cacheDir, "*.tmp")
 	if err != nil {
-		return nil, fmt.Errorf("unable to create a temporary cache file: %w", err)
+		return "", fmt.Errorf("unable to create a temporary cache file: %w", err)
 	}
 	if err := func() error {
 		defer tmp.Close()
+		defer resp.Body.Close()
 		if _, err := io.Copy(tmp, resp.Body); err != nil {
 			return fmt.Errorf("unable to write to cache file: %w", err)
 		}
 		return nil
 	}(); err != nil {
-		return nil, err
+		return "", err
 	}
 
 	// Now that we have the file has been written, rename to atomically populate
 	// the cache
 	if err := os.Rename(tmp.Name(), cacheFile); err != nil {
-		return nil, fmt.Errorf("unable to populate cache: %v", err)
+		return "", fmt.Errorf("unable to populate cache: %v", err)
 	}
 
-	// return a handle to our file
-	f2, err := os.Open(cacheFile)
-	if err != nil {
-		return nil, fmt.Errorf("unable to open cache file: %w", err)
-	}
-	resp.Body = f2
-	return resp, nil
+	return cacheFile, nil
 }
 
 func cacheDirForPackage(root string, pkg *repository.RepositoryPackage) (string, error) {
