@@ -58,25 +58,7 @@ type indexCache struct {
 	indexes sync.Map
 }
 
-func (i *indexCache) get(ctx context.Context, repo string, keys map[string][]byte, arch string, opts *indexOpts) (NamedIndex, error) {
-	// does it start with a pin?
-	var (
-		repoName string
-		repoURL  = repo
-	)
-	if strings.HasPrefix(repo, "@") {
-		// it's a pinned repository, get the name
-		parts := strings.Fields(repo)
-		if len(parts) < 2 {
-			return nil, fmt.Errorf("invalid repository line: %q", repo)
-		}
-		repoName = parts[0][1:]
-		repoURL = parts[1]
-	}
-
-	u := IndexURL(repoURL, arch)
-	repoBase := fmt.Sprintf("%s/%s", repoURL, arch)
-
+func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*repository.ApkIndex, error) {
 	// Do all the expensive things inside the once.
 	once, _ := i.onces.LoadOrStore(u, &sync.Once{})
 	once.(*sync.Once).Do(func() {
@@ -93,13 +75,7 @@ func (i *indexCache) get(ctx context.Context, repo string, keys map[string][]byt
 	}
 	result := v.(indexResult)
 
-	index, err := result.idx, result.err
-	if err != nil {
-		return nil, err
-	}
-
-	repoRef := repository.Repository{Uri: repoBase}
-	return NewNamedRepositoryWithIndex(repoName, repoRef.WithIndex(index)), nil
+	return result.idx, result.err
 }
 
 // IndexURL full URL to the index file for the given repo and arch
@@ -121,7 +97,25 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 	}
 
 	for _, repo := range repos {
-		index, err := globalIndexCache.get(ctx, repo, keys, arch, opts)
+		// does it start with a pin?
+		var (
+			repoName string
+			repoURL  = repo
+		)
+		if strings.HasPrefix(repo, "@") {
+			// it's a pinned repository, get the name
+			parts := strings.Fields(repo)
+			if len(parts) < 2 {
+				return nil, fmt.Errorf("invalid repository line: %q", repo)
+			}
+			repoName = parts[0][1:]
+			repoURL = parts[1]
+		}
+
+		u := IndexURL(repoURL, arch)
+		repoBase := fmt.Sprintf("%s/%s", repoURL, arch)
+
+		index, err := globalIndexCache.get(ctx, u, keys, arch, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +125,8 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 			continue
 		}
 
-		indexes = append(indexes, index)
+		repoRef := repository.Repository{Uri: repoBase}
+		indexes = append(indexes, NewNamedRepositoryWithIndex(repoName, repoRef.WithIndex(index)))
 	}
 	return indexes, nil
 }
