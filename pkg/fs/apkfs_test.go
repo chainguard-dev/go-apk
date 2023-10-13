@@ -22,6 +22,18 @@ func TestReadAPKFile(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, info.Name(), "hello")
 	})
+	t.Run("stat-alternate-workaround", func(t *testing.T) {
+		apkfs, err := NewAPKFS(context.Background(), "testdata/hello-2.12-r0.apk", APKFSPackage)
+		require.Nil(t, err)
+		defer apkfs.Close()
+		require.NotNil(t, apkfs)
+		file, err := apkfs.Open("./usr/bin/hello")
+		require.Nil(t, err)
+		defer file.Close()
+		info, err := file.Stat()
+		require.Nil(t, err)
+		require.Equal(t, info.Name(), "hello")
+	})
 	t.Run("stat-control", func(t *testing.T) {
 		apkfs, err := NewAPKFS(context.Background(), "testdata/hello-2.12-r0.apk", APKFSControl)
 		require.Nil(t, err)
