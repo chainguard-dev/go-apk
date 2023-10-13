@@ -235,8 +235,18 @@ func (a *APKFS) Stat(path string) (fs.FileInfo, error) {
 	}
 	return &apkFSFileInfo{file: file, name: file.name[strings.LastIndex(file.name, "/"):]}, nil
 }
-
+func correctApkFSPath(path string) string {
+	if path == "." {
+		path = "/"
+	}
+	if len(path) > 3 && path[:2] == "./" {
+		path = path[1:]
+	}
+	path = filepath.Clean(path)
+	return path
+}
 func (a *APKFS) ReadDir(path string) ([]fs.DirEntry, error) {
+	path = correctApkFSPath(path)
 	file, ok := a.files[path]
 	if !ok {
 		return nil, fs.ErrNotExist
@@ -261,11 +271,12 @@ func (a *APKFS) ReadDir(path string) ([]fs.DirEntry, error) {
 }
 
 func (a *APKFS) Open(path string) (fs.File, error) {
-	path = filepath.Clean(path)
+	path = correctApkFSPath(path)
 	file, ok := a.files[path]
 	if !ok {
 		return nil, os.ErrNotExist
 	}
+
 	fileCopy := file.acquireCopy()
 	var err error
 	fileCopy.fileDescriptor, fileCopy.tarReader, err = a.getTarReader()
