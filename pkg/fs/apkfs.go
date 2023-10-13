@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -61,6 +62,38 @@ func (a *APKFS) getTarReader() (*os.File, *tar.Reader, error) {
 	tr := tar.NewReader(gzipStream)
 	return file, tr, nil
 }
+
+// Very similar to running mkdir -p on the base directory
+// of whatever file is being added.
+func (a *APKFS) ensureDirectory(file *apkFSFile) {
+	// This would be redundant
+	if file.isDir {
+		return
+	}
+	dirName := file.name[:strings.LastIndex(file.name, "/")]
+	_, directoryExists := a.files[dirName]
+	if directoryExists {
+		return
+	}
+	newDir := &apkFSFile{
+		mode:           file.mode,
+		uid:            0,
+		gid:            0,
+		name:           file.name[:strings.LastIndex(file.name, "/")],
+		size:           0,
+		modTime:        file.modTime,
+		createTime:     file.createTime,
+		linkTarget:     "",
+		linkCount:      0,
+		xattrs:         make(map[string][]byte),
+		isDir:          true,
+		fs:             a,
+		fileDescriptor: nil,
+		tarReader:      nil,
+	}
+	a.files[dirName] = newDir
+	a.ensureDirectory(newDir)
+}
 func NewAPKFS(ctx context.Context, archive string, apkfsType APKFSType) (*APKFS, error) {
 	result := APKFS{archive, make(map[string]*apkFSFile), ctx, nil, apkfsType}
 
@@ -105,7 +138,7 @@ func NewAPKFS(ctx context.Context, archive string, apkfsType APKFSType) (*APKFS,
 			size: uint64(header.Size), modTime: header.ModTime,
 			createTime: header.ChangeTime,
 			linkTarget: header.Linkname, isDir: header.Typeflag == tar.TypeDir,
-			xattrs: make(map[string][]byte)}
+			xattrs: make(map[string][]byte), fs: &result}
 		for k, v := range header.PAXRecords {
 			// If this trend continues then it would be wise to move the
 			// named constant for this into a place accessible from here
@@ -115,7 +148,15 @@ func NewAPKFS(ctx context.Context, archive string, apkfsType APKFSType) (*APKFS,
 			}
 		}
 		result.files["/"+header.Name] = &currentEntry
+		result.ensureDirectory(&currentEntry)
 	}
+
+	result.files["/"] = &apkFSFile{mode: 0777, name: "/",
+		uid: 0, gid: 0,
+		size: 0, modTime: time.Unix(0, 0),
+		createTime: time.Unix(0, 0),
+		linkTarget: "", isDir: true,
+		xattrs: make(map[string][]byte), fs: &result}
 	result.cache, err = result.acquireCache()
 	if err != nil {
 		return nil, err
@@ -195,7 +236,32 @@ func (a *APKFS) Stat(path string) (fs.FileInfo, error) {
 	return &apkFSFileInfo{file: file, name: file.name[strings.LastIndex(file.name, "/"):]}, nil
 }
 
+func (a *APKFS) ReadDir(path string) ([]fs.DirEntry, error) {
+	file, ok := a.files[path]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	if !file.isDir {
+		return nil, fs.ErrInvalid
+	}
+	results := make([]fs.DirEntry, 0)
+	for currentPath, currentFile := range a.files {
+		if path == currentPath {
+			continue
+		}
+		if strings.HasPrefix(currentPath, path) {
+			if strings.LastIndex(currentPath, "/") > len(path)+1 {
+				// some sub-sub directory, not yet
+				continue
+			}
+			results = append(results, &apkFSFileInfo{currentFile, currentPath[strings.LastIndex(currentPath, "/"):]})
+		}
+	}
+	return results, nil
+}
+
 func (a *APKFS) Open(path string) (fs.File, error) {
+	path = filepath.Clean(path)
 	file, ok := a.files[path]
 	if !ok {
 		return nil, os.ErrNotExist
@@ -219,13 +285,19 @@ type apkFSFileInfo struct {
 }
 
 func (a *apkFSFileInfo) Name() string {
-	return a.file.name[strings.LastIndex(a.name, "/")+1:]
+	return a.file.name[strings.LastIndex(a.file.name, "/")+1:]
 }
 func (a *apkFSFileInfo) Size() int64 {
 	return int64(a.file.size)
 }
 func (a *apkFSFileInfo) Mode() fs.FileMode {
 	return a.file.mode
+}
+func (a *apkFSFileInfo) Type() fs.FileMode {
+	return a.Mode().Type()
+}
+func (a *apkFSFileInfo) Info() (fs.FileInfo, error) {
+	return a, nil
 }
 func (a *apkFSFileInfo) ModTime() time.Time {
 	return a.file.modTime
