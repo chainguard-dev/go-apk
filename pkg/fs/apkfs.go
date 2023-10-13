@@ -13,11 +13,19 @@ import (
 	"github.com/chainguard-dev/go-apk/pkg/expandapk"
 )
 
+type APKFSType int
+
+const (
+	APKFSControl APKFSType = iota
+	APKFSPackage
+)
+
 type APKFS struct {
-	path  string
-	files map[string]*apkFSFile
-	ctx   context.Context
-	cache *expandapk.APKExpanded
+	path   string
+	files  map[string]*apkFSFile
+	ctx    context.Context
+	cache  *expandapk.APKExpanded
+	fsType APKFSType
 }
 
 func (a *APKFS) acquireCache() (*expandapk.APKExpanded, error) {
@@ -35,7 +43,13 @@ func (a *APKFS) acquireCache() (*expandapk.APKExpanded, error) {
 	return a.cache, nil
 }
 func (a *APKFS) getTarReader() (*os.File, *tar.Reader, error) {
-	file, err := os.Open(a.cache.PackageFile)
+	var fileName string
+	if a.fsType == APKFSPackage {
+		fileName = a.cache.PackageFile
+	} else if a.fsType == APKFSControl {
+		fileName = a.cache.ControlFile
+	}
+	file, err := os.Open(fileName)
 
 	if err != nil {
 		return nil, nil, err
@@ -47,8 +61,8 @@ func (a *APKFS) getTarReader() (*os.File, *tar.Reader, error) {
 	tr := tar.NewReader(gzipStream)
 	return file, tr, nil
 }
-func NewAPKFS(ctx context.Context, archive string) (*APKFS, error) {
-	result := APKFS{archive, make(map[string]*apkFSFile), ctx, nil}
+func NewAPKFS(ctx context.Context, archive string, apkfsType APKFSType) (*APKFS, error) {
+	result := APKFS{archive, make(map[string]*apkFSFile), ctx, nil, apkfsType}
 
 	file, err := os.Open(archive)
 	if err != nil {
@@ -61,7 +75,13 @@ func NewAPKFS(ctx context.Context, archive string) (*APKFS, error) {
 		return nil, err
 	}
 	defer apkExpanded.Close()
-	gzipFile, err := os.Open(apkExpanded.PackageFile)
+	var fileName string
+	if result.fsType == APKFSPackage {
+		fileName = apkExpanded.PackageFile
+	} else if result.fsType == APKFSControl {
+		fileName = apkExpanded.ControlFile
+	}
+	gzipFile, err := os.Open(fileName)
 	if err != nil {
 		return nil, err
 	}
