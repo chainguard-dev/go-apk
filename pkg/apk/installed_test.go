@@ -317,9 +317,13 @@ func TestSortTarHeaders(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			results := sortTarHeaders(tt.headers)
-			for i, header := range results {
-				assert.Equal(t, tt.expected[i], header.Name, "position %d: expected %s, got %s", i, tt.expected[i], header.Name)
+
+			var resultHeaderNames []string
+			for _, header := range results {
+				resultHeaderNames = append(resultHeaderNames, header.Name)
 			}
+
+			assert.Equal(t, tt.expected, resultHeaderNames)
 		})
 	}
 }
