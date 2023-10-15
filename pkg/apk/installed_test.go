@@ -335,8 +335,8 @@ func TestSortTarHeaders(t *testing.T) {
 				{Name: "usr/bin/cmd", Typeflag: tar.TypeReg},
 			},
 			expected: []string{
-				"usr",
-				"usr/bin",
+				"usr/",
+				"usr/bin/",
 				"usr/bin/cmd",
 			},
 		},

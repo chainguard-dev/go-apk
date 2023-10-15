@@ -422,10 +422,11 @@ func parseInstalledPerms(permString string) (uid, gid int, perms int64, err erro
 	return
 }
 
-// sortTarHeaders sorts tar headers by name. It ensures that all file children of a directory are listed
-// immediately after the directory itself. This is to support lib/apk/db/installed, which lists full paths
-// for directories, but only the basename for the files, so the last directory entry before a file must be the parent
-// in which it sits.
+// sortTarHeaders sorts tar headers by name. It ensures that all file children
+// of a directory are listed immediately after the directory itself. This is to
+// support lib/apk/db/installed, which lists full paths for directories, but
+// only the basename for the files, so the last directory entry before a file
+// must be the parent in which it sits.
 func sortTarHeaders(headers []tar.Header) []tar.Header {
 	var (
 		// Create a tree with everything in it, where keys are full directory paths,
@@ -437,9 +438,12 @@ func sortTarHeaders(headers []tar.Header) []tar.Header {
 	)
 
 	for _, header := range headers {
-		dir := filepath.Dir(header.Name)
-		directoryChildren[dir] = append(directoryChildren[dir], header.Name)
-		all[header.Name] = header
+		// Use a cleaned name for map keys to ensure consistency with lookups later.
+		cleanedName := filepath.Clean(header.Name)
+
+		dir := filepath.Dir(cleanedName)
+		directoryChildren[dir] = append(directoryChildren[dir], cleanedName)
+		all[cleanedName] = header
 	}
 
 	// Map the directory entries (the keys in "directoryChildren") to a slice (and
@@ -463,7 +467,6 @@ func sortTarHeaders(headers []tar.Header) []tar.Header {
 
 	sorted := sortChildrenTarHeaders(directoryChildren, all, topLevelDirs)
 	return sorted
-
 }
 
 func sortChildrenTarHeaders(directoryChildren map[string][]string, all map[string]tar.Header, children []string) []tar.Header {
