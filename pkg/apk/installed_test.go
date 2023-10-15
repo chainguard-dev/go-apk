@@ -308,8 +308,8 @@ func TestSortTarHeaders(t *testing.T) {
 				"etc/logrotate.d/file",
 				"etc/logrotate.d/file2",
 				"usr",
-				"usr/etc",
 				"usr/bin",
+				"usr/etc",
 			},
 		},
 	}
