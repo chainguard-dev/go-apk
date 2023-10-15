@@ -312,6 +312,34 @@ func TestSortTarHeaders(t *testing.T) {
 				"usr/etc",
 			},
 		},
+		{
+			name: "intermediate dirs in the tree should be required to preserve children",
+			headers: []tar.Header{
+				{Name: "usr", Typeflag: tar.TypeDir},
+				{Name: "usr/bin", Typeflag: tar.TypeDir},
+				{Name: "etc", Typeflag: tar.TypeDir},
+				{Name: "etc/logrotate.d/file", Typeflag: tar.TypeReg},
+				{Name: "usr/bin/cmd", Typeflag: tar.TypeReg},
+			},
+			expected: []string{
+				"usr",
+				"usr/bin",
+				"usr/bin/cmd",
+			},
+		},
+		{
+			name: "handle Alpine-style headers (with trailing slashes)",
+			headers: []tar.Header{
+				{Name: "usr/", Typeflag: tar.TypeDir},
+				{Name: "usr/bin/", Typeflag: tar.TypeDir},
+				{Name: "usr/bin/cmd", Typeflag: tar.TypeReg},
+			},
+			expected: []string{
+				"usr",
+				"usr/bin",
+				"usr/bin/cmd",
+			},
+		},
 	}
 
 	for _, tt := range cases {
