@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -63,37 +62,6 @@ func (a *APKFS) getTarReader() (*os.File, *tar.Reader, error) {
 	return file, tr, nil
 }
 
-// Very similar to running mkdir -p on the base directory
-// of whatever file is being added.
-func (a *APKFS) ensureDirectory(file *apkFSFile) {
-	// This would be redundant
-	if file.isDir {
-		return
-	}
-	dirName := file.name[:strings.LastIndex(file.name, "/")]
-	_, directoryExists := a.files[dirName]
-	if directoryExists {
-		return
-	}
-	newDir := &apkFSFile{
-		mode:           file.mode,
-		uid:            0,
-		gid:            0,
-		name:           file.name[:strings.LastIndex(file.name, "/")],
-		size:           0,
-		modTime:        file.modTime,
-		createTime:     file.createTime,
-		linkTarget:     "",
-		linkCount:      0,
-		xattrs:         make(map[string][]byte),
-		isDir:          true,
-		fs:             a,
-		fileDescriptor: nil,
-		tarReader:      nil,
-	}
-	a.files[dirName] = newDir
-	a.ensureDirectory(newDir)
-}
 func NewAPKFS(ctx context.Context, archive string, apkfsType APKFSType) (*APKFS, error) {
 	result := APKFS{archive, make(map[string]*apkFSFile), ctx, nil, apkfsType}
 
@@ -148,10 +116,9 @@ func NewAPKFS(ctx context.Context, archive string, apkfsType APKFSType) (*APKFS,
 			}
 		}
 		result.files["/"+header.Name] = &currentEntry
-		result.ensureDirectory(&currentEntry)
 	}
 
-	result.files["/"] = &apkFSFile{mode: 0777, name: "/",
+	result.files["/"] = &apkFSFile{mode: 0777 | fs.ModeDir, name: "/",
 		uid: 0, gid: 0,
 		size: 0, modTime: time.Unix(0, 0),
 		createTime: time.Unix(0, 0),
@@ -229,11 +196,14 @@ func (a *apkFSFile) Close() error {
 }
 
 func (a *APKFS) Stat(path string) (fs.FileInfo, error) {
+	path = correctApkFSPath(path)
 	file, ok := a.files[path]
 	if !ok {
 		return nil, os.ErrNotExist
 	}
-	return &apkFSFileInfo{file: file, name: file.name[strings.LastIndex(file.name, "/"):]}, nil
+	onlyName := file.name[strings.LastIndex(file.name, "/"):]
+	info := &apkFSFileInfo{file: file, name: onlyName}
+	return info, nil
 }
 func correctApkFSPath(path string) string {
 	if path == "." {
@@ -242,7 +212,11 @@ func correctApkFSPath(path string) string {
 	if len(path) > 3 && path[:2] == "./" {
 		path = path[1:]
 	}
-	path = filepath.Clean(path)
+
+	if len(path) < 1 || path[0:1] != "/" {
+		path = "/" + path
+	}
+
 	return path
 }
 func (a *APKFS) ReadDir(path string) ([]fs.DirEntry, error) {
@@ -259,7 +233,11 @@ func (a *APKFS) ReadDir(path string) ([]fs.DirEntry, error) {
 		if path == currentPath {
 			continue
 		}
-		if strings.HasPrefix(currentPath, path) {
+		pathPrefix := path
+		if path != "/" {
+			pathPrefix += "/"
+		}
+		if strings.HasPrefix(currentPath, pathPrefix) {
 			if strings.LastIndex(currentPath, "/") > len(path)+1 {
 				// some sub-sub directory, not yet
 				continue
@@ -305,7 +283,13 @@ func (a *apkFSFileInfo) Mode() fs.FileMode {
 	return a.file.mode
 }
 func (a *apkFSFileInfo) Type() fs.FileMode {
-	return a.Mode().Type()
+	if a.IsDir() {
+		return fs.ModeDir
+	}
+	if a.file.linkTarget != "" {
+		return fs.ModeSymlink
+	}
+	return a.Mode()
 }
 func (a *apkFSFileInfo) Info() (fs.FileInfo, error) {
 	return a, nil
