@@ -189,45 +189,16 @@ func (a *APK) controlValue(controlTarGz io.Reader, want string) ([]string, error
 		return nil, fmt.Errorf("unable to gunzip control tar file: %w", err)
 	}
 	defer gz.Close()
-	tr := tar.NewReader(gz)
 
-	values := []string{}
-	for {
-		header, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		// ignore .PKGINFO as it is not a script
-		if header.Name != ".PKGINFO" {
-			continue
-		}
-
-		b, err := io.ReadAll(tr)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read .PKGINFO from control tar.gz file: %w", err)
-		}
-		lines := strings.Split(string(b), "\n")
-		for _, line := range lines {
-			parts := strings.Split(line, "=")
-			if len(parts) != 2 {
-				continue
-			}
-			key := strings.TrimSpace(parts[0])
-			if key != want {
-				continue
-			}
-
-			value := strings.TrimSpace(parts[1])
-			values = append(values, value)
-		}
-
-		break
+	mapping, err := controlValue(gz, want)
+	if err != nil {
+		return nil, err
 	}
 
+	values, ok := mapping[want]
+	if !ok {
+		return []string{}, nil
+	}
 	return values, nil
 }
 
