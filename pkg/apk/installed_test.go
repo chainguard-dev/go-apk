@@ -276,36 +276,82 @@ func TestUpdateTriggers(t *testing.T) {
 }
 
 func TestSortTarHeaders(t *testing.T) {
-	headers := []tar.Header{
-		{Name: "bin", Typeflag: tar.TypeDir},
-		{Name: "usr", Typeflag: tar.TypeDir},
-		{Name: "usr/etc", Typeflag: tar.TypeDir},
-		{Name: "usr/bin", Typeflag: tar.TypeDir},
-		{Name: "bin/ls", Typeflag: tar.TypeReg},
-		{Name: "bin/busybox"},
-		{Name: "etc", Typeflag: tar.TypeDir},
-		{Name: "etc/logrotate.d", Typeflag: tar.TypeDir},
-		{Name: "etc/logrotate.d/file", Typeflag: tar.TypeReg},
-		{Name: "etc/logrotate.d/file2", Typeflag: tar.TypeReg},
-		{Name: "etc/hosts", Typeflag: tar.TypeReg},
-		{Name: "etc/mylaterfile", Typeflag: tar.TypeReg}, // this is particularly good for testing that it comes before logrotate.d
+	cases := []struct {
+		name     string
+		headers  []tar.Header
+		expected []string
+	}{
+		{
+			name: "normal",
+			headers: []tar.Header{
+				{Name: "bin", Typeflag: tar.TypeDir},
+				{Name: "usr", Typeflag: tar.TypeDir},
+				{Name: "usr/etc", Typeflag: tar.TypeDir},
+				{Name: "usr/bin", Typeflag: tar.TypeDir},
+				{Name: "bin/ls", Typeflag: tar.TypeReg},
+				{Name: "bin/busybox"},
+				{Name: "etc", Typeflag: tar.TypeDir},
+				{Name: "etc/logrotate.d", Typeflag: tar.TypeDir},
+				{Name: "etc/logrotate.d/file", Typeflag: tar.TypeReg},
+				{Name: "etc/logrotate.d/file2", Typeflag: tar.TypeReg},
+				{Name: "etc/hosts", Typeflag: tar.TypeReg},
+				{Name: "etc/mylaterfile", Typeflag: tar.TypeReg}, // this is particularly good for testing that it comes before logrotate.d
+			},
+			expected: []string{
+				"bin",
+				"bin/busybox",
+				"bin/ls",
+				"etc",
+				"etc/hosts",
+				"etc/mylaterfile",
+				"etc/logrotate.d",
+				"etc/logrotate.d/file",
+				"etc/logrotate.d/file2",
+				"usr",
+				"usr/bin",
+				"usr/etc",
+			},
+		},
+		{
+			name: "intermediate dirs in the tree should be required to preserve children",
+			headers: []tar.Header{
+				{Name: "usr", Typeflag: tar.TypeDir},
+				{Name: "usr/bin", Typeflag: tar.TypeDir},
+				{Name: "etc", Typeflag: tar.TypeDir},
+				{Name: "etc/logrotate.d/file", Typeflag: tar.TypeReg},
+				{Name: "usr/bin/cmd", Typeflag: tar.TypeReg},
+			},
+			expected: []string{
+				"usr",
+				"usr/bin",
+				"usr/bin/cmd",
+			},
+		},
+		{
+			name: "handle Alpine-style headers (with trailing slashes)",
+			headers: []tar.Header{
+				{Name: "usr/", Typeflag: tar.TypeDir},
+				{Name: "usr/bin/", Typeflag: tar.TypeDir},
+				{Name: "usr/bin/cmd", Typeflag: tar.TypeReg},
+			},
+			expected: []string{
+				"usr/",
+				"usr/bin/",
+				"usr/bin/cmd",
+			},
+		},
 	}
-	expected := []string{
-		"bin",
-		"bin/busybox",
-		"bin/ls",
-		"etc",
-		"etc/hosts",
-		"etc/mylaterfile",
-		"etc/logrotate.d",
-		"etc/logrotate.d/file",
-		"etc/logrotate.d/file2",
-		"usr",
-		"usr/etc",
-		"usr/bin",
-	}
-	results := sortTarHeaders(headers)
-	for i, header := range results {
-		assert.Equal(t, expected[i], header.Name, "position %d: expected %s, got %s", i, expected[i], header.Name)
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			results := sortTarHeaders(tt.headers)
+
+			var resultHeaderNames []string
+			for _, header := range results {
+				resultHeaderNames = append(resultHeaderNames, header.Name)
+			}
+
+			assert.Equal(t, tt.expected, resultHeaderNames)
+		})
 	}
 }
