@@ -61,7 +61,15 @@ func (a *APKFS) getTarReader() (*os.File, *tar.Reader, error) {
 	tr := tar.NewReader(gzipStream)
 	return file, tr, nil
 }
-
+func correctMode(mode fs.FileMode, header *tar.Header) fs.FileMode {
+	switch header.Typeflag {
+	case tar.TypeSymlink:
+		mode |= fs.ModeSymlink
+	case tar.TypeDir:
+		mode |= fs.ModeDir
+	}
+	return mode
+}
 func NewAPKFS(ctx context.Context, archive string, apkfsType APKFSType) (*APKFS, error) {
 	result := APKFS{archive, make(map[string]*apkFSFile), ctx, nil, apkfsType}
 
@@ -101,7 +109,8 @@ func NewAPKFS(ctx context.Context, archive string, apkfsType APKFSType) (*APKFS,
 		} else if err != nil {
 			return nil, err
 		}
-		currentEntry := apkFSFile{mode: fs.FileMode(header.Mode), name: "/" + header.Name,
+
+		currentEntry := apkFSFile{mode: correctMode(fs.FileMode(header.Mode), header), name: "/" + header.Name,
 			uid: header.Uid, gid: header.Gid,
 			size: uint64(header.Size), modTime: header.ModTime,
 			createTime: header.ChangeTime,
@@ -283,12 +292,6 @@ func (a *apkFSFileInfo) Mode() fs.FileMode {
 	return a.file.mode
 }
 func (a *apkFSFileInfo) Type() fs.FileMode {
-	if a.IsDir() {
-		return fs.ModeDir
-	}
-	if a.file.linkTarget != "" {
-		return fs.ModeSymlink
-	}
 	return a.Mode()
 }
 func (a *apkFSFileInfo) Info() (fs.FileInfo, error) {
