@@ -77,7 +77,7 @@ func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, ind
 	logger.Printf("writing signed index to %s", indexFile)
 
 	var sigBuffer bytes.Buffer
-	if err := multitarctx.WriteTargz(ctx, &sigBuffer, sigFS); err != nil {
+	if err := multitarctx.WriteTargz(ctx, &sigBuffer, sigFS, sigFS); err != nil {
 		return fmt.Errorf("unable to write signature tarball: %w", err)
 	}
 

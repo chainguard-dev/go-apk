@@ -153,6 +153,14 @@ func (c *Context) writeTar(ctx context.Context, tw *tar.Writer, fsys fs.FS, user
 		header.ModTime = c.SourceDateEpoch
 		header.ChangeTime = c.SourceDateEpoch
 
+		if uid, ok := c.remapUIDs[header.Uid]; ok {
+			header.Uid = uid
+		}
+
+		if gid, ok := c.remapGIDs[header.Gid]; ok {
+			header.Gid = gid
+		}
+
 		if name, ok := users[header.Uid]; ok {
 			header.Uname = name
 		}
@@ -277,26 +285,30 @@ func (c *Context) writeTar(ctx context.Context, tw *tar.Writer, fsys fs.FS, user
 //
 // Deprecated: Use WriteTargz or WriteTar instead.
 func (c *Context) WriteArchive(dst io.Writer, src fs.FS) error {
-	return c.WriteTargz(context.Background(), dst, src)
+	return c.WriteTargz(context.Background(), dst, src, src)
 }
 
 // WriteTargz writes a gzipped tarball to the provided io.Writer from the provided fs.FS.
 // To override permissions, set the OverridePerms when creating the Context.
 // If you need to get multiple filesystems, merge them prior to calling WriteArchive.
-func (c *Context) WriteTargz(ctx context.Context, dst io.Writer, src fs.FS) error {
+// userinfosrc should be a fs which can provide an optionally provide an etc/passwd and etc/group file.
+// The etc/passwd and etc/group file provide username and group name mappings for the tar.
+func (c *Context) WriteTargz(ctx context.Context, dst io.Writer, src fs.FS, userinfofs fs.FS) error {
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "WriteTargz")
 	defer span.End()
 
 	gzw := gzip.NewWriter(dst)
 	defer gzw.Close()
 
-	return c.WriteTar(ctx, gzw, src)
+	return c.WriteTar(ctx, gzw, src, userinfofs)
 }
 
 // WriteTar writes a tarball to the provided io.Writer from the provided fs.FS.
 // To override permissions, set the OverridePerms when creating the Context.
 // If you need to get multiple filesystems, merge them prior to calling WriteArchive.
-func (c *Context) WriteTar(ctx context.Context, dst io.Writer, src fs.FS) error {
+// userinfosrc should be a fs which can provide an optionally provide an etc/passwd and etc/group file.
+// The etc/passwd and etc/group file provide username and group name mappings for the tar.
+func (c *Context) WriteTar(ctx context.Context, dst io.Writer, src fs.FS, userinfosrc fs.FS) error {
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "WriteTar")
 	defer span.End()
 
@@ -308,8 +320,8 @@ func (c *Context) WriteTar(ctx context.Context, dst io.Writer, src fs.FS) error 
 	}
 
 	// get the uname and gname maps
-	usersFile, _ := passwd.ReadUserFile(src, "etc/passwd")
-	groupsFile, _ := passwd.ReadGroupFile(src, "etc/group")
+	usersFile, _ := passwd.ReadUserFile(userinfosrc, "etc/passwd")
+	groupsFile, _ := passwd.ReadGroupFile(userinfosrc, "etc/group")
 	users := map[int]string{}
 	groups := map[int]string{}
 	for _, u := range usersFile.Entries {

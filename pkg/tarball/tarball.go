@@ -28,6 +28,8 @@ type Context struct {
 	OverrideGname   string
 	SkipClose       bool
 	UseChecksums    bool
+	remapUIDs       map[int]int
+	remapGIDs       map[int]int
 	overridePerms   map[string]tar.Header
 }
 
@@ -80,6 +82,22 @@ func WithOverridePerms(files []tar.Header) Option {
 func WithOverrideUname(uname string) Option {
 	return func(ctx *Context) error {
 		ctx.OverrideUname = uname
+		return nil
+	}
+}
+
+// WithRemapUIDs sets a UID remapping in the Context.
+func WithRemapUIDs(uids map[int]int) Option {
+	return func(ctx *Context) error {
+		ctx.remapUIDs = uids
+		return nil
+	}
+}
+
+// WithRemapGIDs sets a GID remapping in the Context.
+func WithRemapGIDs(gids map[int]int) Option {
+	return func(ctx *Context) error {
+		ctx.remapGIDs = gids
 		return nil
 	}
 }
