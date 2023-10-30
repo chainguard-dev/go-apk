@@ -645,6 +645,7 @@ func TestSortPackages(t *testing.T) {
 		{"just versions", []repoPkgBase{
 			{&repository.Package{Name: "package1", Version: "1.0.0"}, "http://a.b.com", 2},
 			{&repository.Package{Name: "package1", Version: "2.0.1"}, "http://a.b.com", 0},
+			{&repository.Package{Name: "package1", Version: "1.2.0abc"}, "http://a.b.com", 3},
 			{&repository.Package{Name: "package1", Version: "1.2.0"}, "http://a.b.com", 1},
 		}, nil, nil},
 		{"just names", []repoPkgBase{
