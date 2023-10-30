@@ -678,7 +678,8 @@ func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *repositor
 		}
 		jVersion, err := p.parseVersion(jVersionStr)
 		if err != nil {
-			return false
+			// If j fails to parse, prefer i.
+			return true
 		}
 		versions := compareVersions(iVersion, jVersion)
 		if versions != equal {
@@ -692,7 +693,8 @@ func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *repositor
 			}
 			jVersion, err := p.parseVersion(pkgs[j].Version)
 			if err != nil {
-				return false
+				// If j fails to parse, prefer i.
+				return true
 			}
 			versions := compareVersions(iVersion, jVersion)
 			if versions != equal {
