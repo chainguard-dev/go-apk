@@ -333,23 +333,23 @@ func (a *APK) lazilyInstallAPKFiles(ctx context.Context, wh writeHeaderer, tf *t
 	var files []tar.Header
 
 	var startedDataSection bool
-	for _, header := range tf.Entries() {
+	for _, file := range tf.Entries() {
 		// per https://git.alpinelinux.org/apk-tools/tree/src/extract_v2.c?id=337734941831dae9a6aa441e38611c43a5fd72c0#n120
 		//  * APKv1.0 compatibility - first non-hidden file is
 		//  * considered to start the data section of the file.
 		//  * This does not make any sense if the file has v2.0
 		//  * style .PKGINFO
-		if !startedDataSection && header.Name[0] == '.' && !strings.Contains(header.Name, "/") {
+		if !startedDataSection && file.Header.Name[0] == '.' && !strings.Contains(file.Header.Name, "/") {
 			continue
 		}
 		// whatever it is now, it is in the data section
 		startedDataSection = true
 
-		if err := wh.WriteHeader(header.Header, tf, pkg); err != nil {
+		if err := wh.WriteHeader(file.Header, tf, pkg); err != nil {
 			return nil, err
 		}
 
-		files = append(files, header.Header)
+		files = append(files, file.Header)
 	}
 
 	return files, nil

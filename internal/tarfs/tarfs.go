@@ -17,28 +17,54 @@ package tarfs
 import (
 	"archive/tar"
 	"bufio"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"path"
 	"time"
+
+	"golang.org/x/exp/slices"
 )
 
 type Entry struct {
-	tar.Header
+	Header tar.Header
 	Offset int64
+
+	dir string
+	fi  fs.FileInfo
+}
+
+func (e Entry) Name() string {
+	return e.fi.Name()
+}
+
+func (e Entry) Size() int64 {
+	return e.Header.Size
+}
+
+func (e Entry) Type() fs.FileMode {
+	return e.fi.Mode()
+}
+
+func (e Entry) Info() (fs.FileInfo, error) {
+	return e.fi, nil
+}
+
+func (e Entry) IsDir() bool {
+	return e.fi.IsDir()
 }
 
 type File struct {
 	fsys   *FS
 	handle io.ReadSeekCloser
 	r      io.Reader
-	Entry  Entry
+	Entry  *Entry
 }
 
 func (f *File) Stat() (fs.FileInfo, error) {
-	return f.Entry.FileInfo(), nil
+	return f.Entry.fi, nil
 }
 
 func (f *File) Read(p []byte) (int, error) {
@@ -50,12 +76,12 @@ func (f *File) relativeOffset(offset int64, whence int) (int64, error) {
 	case io.SeekCurrent:
 		return offset, nil
 	case io.SeekStart:
-		if offset > f.Entry.Size {
-			return 0, fmt.Errorf("offset %d greater than file size %d", offset, f.Entry.Size)
+		if offset > f.Entry.Header.Size {
+			return 0, fmt.Errorf("offset %d greater than file size %d", offset, f.Entry.Header.Size)
 		}
 	case io.SeekEnd:
-		if offset+f.Entry.Size < 0 {
-			return 0, fmt.Errorf("offset %d greater than file size %d", offset, f.Entry.Size)
+		if offset+f.Entry.Header.Size < 0 {
+			return 0, fmt.Errorf("offset %d greater than file size %d", offset, f.Entry.Header.Size)
 		}
 	default:
 		return 0, fmt.Errorf("invalid whence: %d", whence)
@@ -81,7 +107,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 func (f *File) ReadAt(p []byte, off int64) (int, error) {
 	// If the underlying ReadSeekCloser implements ReaderAt, just use that.
 	if ra, ok := f.handle.(io.ReaderAt); ok {
-		bytesLeft := f.Entry.Size - off
+		bytesLeft := f.Entry.Header.Size - off
 		if int64(len(p)) > bytesLeft {
 			p = p[:bytesLeft]
 		}
@@ -92,7 +118,7 @@ func (f *File) ReadAt(p []byte, off int64) (int, error) {
 	if _, err := f.handle.Seek(f.Entry.Offset+off, io.SeekStart); err != nil {
 		return 0, err
 	}
-	f.r = io.LimitReader(f.handle, f.Entry.Size-off)
+	f.r = io.LimitReader(f.handle, f.Entry.Header.Size-off)
 
 	return io.ReadFull(f.r, p)
 }
@@ -103,7 +129,7 @@ func (f *File) Close() error {
 
 type FS struct {
 	open  func() (io.ReadSeekCloser, error)
-	files []Entry
+	files []*Entry
 	index map[string]int
 }
 
@@ -121,7 +147,7 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 		Entry: e,
 	}
 
-	if e.Size == 0 {
+	if e.Header.Size == 0 {
 		return f, nil
 	}
 
@@ -130,12 +156,12 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 		return nil, err
 	}
 	f.handle = rc
-	f.r = io.LimitReader(rc, e.Size)
+	f.r = io.LimitReader(rc, e.Header.Size)
 
 	return f, nil
 }
 
-func (fsys *FS) Entries() []Entry {
+func (fsys *FS) Entries() []*Entry {
 	return fsys.files
 }
 
@@ -164,7 +190,7 @@ func (r root) Sys() any           { return nil }
 
 func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 	if i, ok := fsys.index[name]; ok {
-		return fsys.files[i].FileInfo(), nil
+		return fsys.files[i].fi, nil
 	}
 
 	// fs.WalkDir expects "." to return a root entry to bootstrap the walk.
@@ -176,40 +202,22 @@ func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 	return nil, fs.ErrNotExist
 }
 
-type dirEntry struct {
-	fi fs.FileInfo
-}
-
-func (d dirEntry) Name() string {
-	return d.fi.Name()
-}
-
-func (d dirEntry) Type() fs.FileMode {
-	return d.fi.Mode()
-}
-
-func (d dirEntry) Info() (fs.FileInfo, error) {
-	return d.fi, nil
-}
-
-func (d dirEntry) IsDir() bool {
-	return d.fi.IsDir()
-}
-
 func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	children := []fs.DirEntry{}
 	for _, f := range fsys.files {
 		// This is load bearing.
 		f := f
 
-		if path.Dir(f.Name) != name {
+		if f.dir != name {
 			continue
 		}
 
-		children = append(children, dirEntry{
-			fi: f.FileInfo(),
-		})
+		children = append(children, f)
 	}
+
+	slices.SortFunc(children, func(a, b fs.DirEntry) int {
+		return cmp.Compare(a.Name(), b.Name())
+	})
 
 	return children, nil
 }
@@ -228,7 +236,7 @@ func (cr *countReader) Read(p []byte) (int, error) {
 func New(open func() (io.ReadSeekCloser, error)) (*FS, error) {
 	fsys := &FS{
 		open:  open,
-		files: []Entry{},
+		files: []*Entry{},
 		index: map[string]int{},
 	}
 
@@ -250,9 +258,11 @@ func New(open func() (io.ReadSeekCloser, error)) (*FS, error) {
 			return nil, err
 		}
 		fsys.index[hdr.Name] = len(fsys.files)
-		fsys.files = append(fsys.files, Entry{
+		fsys.files = append(fsys.files, &Entry{
 			Header: *hdr,
 			Offset: cr.n,
+			dir:    path.Dir(hdr.Name),
+			fi:     hdr.FileInfo(),
 		})
 	}
 
