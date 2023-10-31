@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/chainguard-dev/go-apk/internal/tarfs"
 	"github.com/klauspost/compress/gzip"
@@ -52,14 +53,51 @@ type APKExpanded struct {
 	// The package data filename in .tar format.
 	TarFile string
 
+	// Expose ControlFile as an indexed FS implementation.
+	ControlFS *tarfs.FS
+
 	// Exposes TarFile as an indexed FS implementation.
 	TarFS *tarfs.FS
 
 	ControlHash []byte
 	PackageHash []byte
+
+	sync.Mutex
+	controlData []byte
 }
 
 const meg = 1 << 20
+
+type nopRSK struct {
+	io.ReadSeeker
+}
+
+func (n nopRSK) Close() error {
+	return nil
+}
+
+func (a *APKExpanded) ControlData() (io.ReadSeekCloser, error) {
+	a.Lock()
+	defer a.Unlock()
+	if a.controlData == nil {
+		rc, err := os.Open(a.ControlFile)
+		if err != nil {
+			return nil, err
+		}
+
+		zr, err := gzip.NewReader(rc)
+		if err != nil {
+			return nil, err
+		}
+
+		a.controlData, err = io.ReadAll(zr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return nopRSK{bytes.NewReader(a.controlData)}, nil
+}
 
 func (a *APKExpanded) PackageData() (io.ReadSeekCloser, error) {
 	uf, err := os.Open(a.TarFile)
@@ -420,6 +458,11 @@ func ExpandApk(ctx context.Context, source io.Reader, cacheDir string) (*APKExpa
 	}
 	if signed {
 		expanded.SignatureFile = gzipStreams[0]
+	}
+
+	expanded.ControlFS, err = tarfs.New(expanded.ControlData)
+	if err != nil {
+		return nil, fmt.Errorf("indexing %q: %w", expanded.ControlFile, err)
 	}
 
 	expanded.TarFile = strings.TrimSuffix(expanded.PackageFile, ".gz")

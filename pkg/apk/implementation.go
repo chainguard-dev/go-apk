@@ -769,6 +769,12 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *repository.RepositoryPacka
 	}
 	exp.ControlFile = ctl
 	exp.ControlHash = checksum
+
+	exp.ControlFS, err = tarfs.New(exp.ControlData)
+	if err != nil {
+		return nil, err
+	}
+
 	exp.Size += cf.Size()
 
 	sig := filepath.Join(cacheDir, pkgHexSum+".sig.tar.gz")
