@@ -84,6 +84,7 @@ func (a *APKExpanded) ControlData() (io.ReadSeekCloser, error) {
 		if err != nil {
 			return nil, err
 		}
+		defer rc.Close()
 
 		zr, err := gzip.NewReader(rc)
 		if err != nil {
@@ -118,6 +119,7 @@ func (a *APKExpanded) PackageData() (io.ReadSeekCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening %q: %w", a.PackageFile, err)
 	}
+	defer f.Close()
 
 	br := bufio.NewReaderSize(f, bufSize)
 	zr, err := gzip.NewReader(br)
