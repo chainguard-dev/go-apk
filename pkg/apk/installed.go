@@ -30,12 +30,10 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/gzip"
-
-	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
 type InstalledPackage struct {
-	repository.Package
+	Package
 	Files []*tar.Header
 }
 
@@ -50,7 +48,7 @@ func (a *APK) GetInstalled() ([]*InstalledPackage, error) {
 }
 
 // addInstalledPackage add a package to the list of installed packages
-func (a *APK) addInstalledPackage(pkg *repository.Package, files []tar.Header) error {
+func (a *APK) addInstalledPackage(pkg *Package, files []tar.Header) error {
 	// be sure to open the file in append mode so we add to the end
 	installedFile, err := a.fs.OpenFile(installedFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -115,7 +113,7 @@ func (a *APK) isInstalledPackage(pkg string) (bool, error) {
 }
 
 // updateScriptsTar insert the scripts into the tarball
-func (a *APK) updateScriptsTar(pkg *repository.Package, controlTarGz io.Reader, sourceDateEpoch *time.Time) error {
+func (a *APK) updateScriptsTar(pkg *Package, controlTarGz io.Reader, sourceDateEpoch *time.Time) error {
 	gz, err := gzip.NewReader(controlTarGz)
 	if err != nil {
 		return fmt.Errorf("unable to gunzip control tar.gz file: %w", err)
@@ -203,7 +201,7 @@ func (a *APK) controlValue(controlTarGz io.Reader, want string) ([]string, error
 }
 
 // updateTriggers insert the triggers into the triggers file
-func (a *APK) updateTriggers(pkg *repository.Package, controlTarGz io.Reader) error {
+func (a *APK) updateTriggers(pkg *Package, controlTarGz io.Reader) error {
 	triggers, err := a.fs.OpenFile(triggersFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0)
 	if err != nil {
 		return fmt.Errorf("unable to open triggers file %s: %w", triggersFilePath, err)

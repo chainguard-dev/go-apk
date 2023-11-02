@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
 func TestParseVersion(t *testing.T) {
@@ -864,7 +863,7 @@ func TestResolveVersion(t *testing.T) {
 		version     string
 		compare     versionDependency
 		pin         string
-		installed   *repository.RepositoryPackage
+		installed   *RepositoryPackage
 		want        string
 		description string
 	}{
@@ -890,7 +889,7 @@ func TestResolveVersion(t *testing.T) {
 			pr := NewPkgResolver(context.Background(), []NamedIndex{})
 			found := pr.filterPackages(pkgs, withVersion(tt.version, tt.compare), withPreferPin(tt.pin), withInstalledPackage(tt.installed))
 			// add the existing in, if any
-			existing := make(map[string]*repository.RepositoryPackage)
+			existing := make(map[string]*RepositoryPackage)
 			if tt.installed != nil {
 				existing[tt.installed.Name] = tt.installed
 			}

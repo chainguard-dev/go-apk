@@ -19,8 +19,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
 // versionRegex how to parse versions.
@@ -420,7 +418,7 @@ type filterOptions struct {
 	allowPin  string
 	preferPin string
 	version   string
-	installed *repository.RepositoryPackage
+	installed *RepositoryPackage
 	compare   versionDependency
 }
 
@@ -442,7 +440,7 @@ func withVersion(version string, compare versionDependency) filterOption {
 		o.compare = compare
 	}
 }
-func withInstalledPackage(pkg *repository.RepositoryPackage) filterOption {
+func withInstalledPackage(pkg *RepositoryPackage) filterOption {
 	return func(o *filterOptions) {
 		o.installed = pkg
 	}

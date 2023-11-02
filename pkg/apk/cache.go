@@ -23,8 +23,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
 // This is terrible but simpler than plumbing around a cache for now.
@@ -306,7 +304,7 @@ func (t *cacheTransport) retrieveAndSaveFile(request *http.Request, cp cachePlac
 	return cacheFile, nil
 }
 
-func cacheDirForPackage(root string, pkg *repository.RepositoryPackage) (string, error) {
+func cacheDirForPackage(root string, pkg *RepositoryPackage) (string, error) {
 	u, err := packageAsURL(pkg)
 	if err != nil {
 		return "", err

@@ -27,7 +27,6 @@ import (
 	"os"
 	"strings"
 
-	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.opentelemetry.io/otel"
 
 	"github.com/chainguard-dev/go-apk/internal/tarfs"
@@ -326,7 +325,7 @@ func checksumFromHeader(header *tar.Header) ([]byte, error) {
 // to provide much cheaper access to the file data when we read it later.
 //
 // This is an optimizing fastpath for when a.fs is a specific implementation that supports it.
-func (a *APK) lazilyInstallAPKFiles(ctx context.Context, wh writeHeaderer, tf *tarfs.FS, pkg *repository.Package) ([]tar.Header, error) {
+func (a *APK) lazilyInstallAPKFiles(ctx context.Context, wh writeHeaderer, tf *tarfs.FS, pkg *Package) ([]tar.Header, error) {
 	_, span := otel.Tracer("go-apk").Start(ctx, "lazilyInstallAPKFiles")
 	defer span.End()
 

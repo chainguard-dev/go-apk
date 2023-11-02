@@ -29,7 +29,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.alpinelinux.org/alpine/go/repository"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 )
@@ -48,7 +47,7 @@ QwIDAQAB
 )
 
 var (
-	testPkg = repository.Package{
+	testPkg = Package{
 		Name:    "alpine-baselayout",
 		Version: "3.2.0-r23",
 		Arch:    testArch,
@@ -279,13 +278,13 @@ func TestLoadSystemKeyring(t *testing.T) {
 
 func TestFetchPackage(t *testing.T) {
 	var (
-		repo          = repository.Repository{Uri: fmt.Sprintf("%s/%s", testAlpineRepos, testArch)}
-		packages      = []*repository.Package{&testPkg}
-		repoWithIndex = repo.WithIndex(&repository.ApkIndex{
+		repo          = Repository{Uri: fmt.Sprintf("%s/%s", testAlpineRepos, testArch)}
+		packages      = []*Package{&testPkg}
+		repoWithIndex = repo.WithIndex(&ApkIndex{
 			Packages: packages,
 		})
 		testEtag = "testetag"
-		pkg      = repository.NewRepositoryPackage(&testPkg, repoWithIndex)
+		pkg      = NewRepositoryPackage(&testPkg, repoWithIndex)
 		ctx      = context.Background()
 	)
 	prepLayout := func(t *testing.T, cache string) *APK {

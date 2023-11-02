@@ -30,10 +30,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
-var testInstalledPackages = []*repository.Package{
+var testInstalledPackages = []*Package{
 	{Name: "alpine-baselayout-data", Version: "3.2.0-r22"},
 	{Name: "musl", Version: "1.2.3-r0"},
 	{Name: "busybox", Version: "1.35.0-r17"},
@@ -68,7 +67,7 @@ func TestGetInstalled(t *testing.T) {
 func TestAddInstalledPackage(t *testing.T) {
 	a, _, err := testGetTestAPK()
 	require.NoErrorf(t, err, "unable to initialize APK implementation: %v", err)
-	newPkg := &repository.Package{
+	newPkg := &Package{
 		Name:      "testpkg",
 		Version:   "1.0.0",
 		Arch:      "x86_64",
@@ -85,7 +84,7 @@ func TestAddInstalledPackage(t *testing.T) {
 			paxRecordsChecksumKey: "91abf197227d2fe71d016f4ccb68b16c9c9b2768",
 		}}, // should generate extra a: perms line
 	}
-	// addInstalledPackage(pkg *repository.Package, files []tar.Header) error
+	// addInstalledPackage(pkg *Package, files []tar.Header) error
 	err = a.addInstalledPackage(newPkg, newFiles)
 	require.NoErrorf(t, err, "unable to add installed package: %v", err)
 	// check that the new packages were added
@@ -132,7 +131,7 @@ func TestUpdateScriptsTar(t *testing.T) {
 	randBytes := make([]byte, 32)
 	_, err = rand.Read(randBytes)
 	require.NoErrorf(t, err, "unable to generate random bytes: %v", err)
-	pkg := &repository.Package{
+	pkg := &Package{
 		Name:     "testpkg",
 		Version:  "1.0.0",
 		Checksum: randBytes,
@@ -214,7 +213,7 @@ func TestUpdateTriggers(t *testing.T) {
 	randBytes := make([]byte, 32)
 	_, err = rand.Read(randBytes)
 	require.NoErrorf(t, err, "unable to generate random bytes: %v", err)
-	pkg := &repository.Package{
+	pkg := &Package{
 		Name:     "testpkg",
 		Version:  "1.0.0",
 		Checksum: randBytes,
