@@ -76,7 +76,7 @@ var apkIndexTemplate = template.Must(template.New(apkIndexFilename).Funcs(
 
 	`)))
 
-type ApkIndex struct {
+type APKIndex struct { //nolint:revive
 	Signature   []byte
 	Description string
 	Packages    []*Package
@@ -84,7 +84,7 @@ type ApkIndex struct {
 
 // ParsePackageIndex parses a plain (uncompressed) APKINDEX file. It returns an
 // ApkIndex struct
-func ParsePackageIndex(apkIndexUnpacked io.Reader) (packages []*Package, err error) {
+func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) { //nolint:gocyclo
 	if closer, ok := apkIndexUnpacked.(io.Closer); ok {
 		defer closer.Close()
 	}
@@ -94,6 +94,7 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) (packages []*Package, err err
 	pkg := &Package{}
 	linenr := 1
 
+	packages := []*Package{}
 	for indexScanner.Scan() {
 		line := indexScanner.Text()
 		if len(line) == 0 {
@@ -176,37 +177,34 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) (packages []*Package, err err
 		linenr++
 	}
 
-	return
+	return packages, nil
 }
 
-func IndexFromArchive(archive io.ReadCloser) (apkindex *ApkIndex, err error) {
+func IndexFromArchive(archive io.ReadCloser) (*APKIndex, error) {
 	gzipReader, err := gzip.NewReader(archive)
-
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	defer gzipReader.Close()
 
 	tarReader := tar.NewReader(gzipReader)
-	apkindex = &ApkIndex{}
+	apkindex := &APKIndex{}
 
 	for {
-		hdr, tarErr := tarReader.Next()
-
-		if tarErr == io.EOF {
+		hdr, err := tarReader.Next()
+		if err == io.EOF {
 			break
 		}
-
-		if tarErr != nil {
-			return nil, tarErr
+		if err != nil {
+			return nil, err
 		}
 
 		switch hdr.Name {
 		case apkIndexFilename:
 			apkindex.Packages, err = ParsePackageIndex(io.NopCloser(tarReader))
 			if err != nil {
-				return
+				return nil, err
 			}
 		case descriptionFilename:
 			description, err := io.ReadAll(tarReader)
@@ -216,7 +214,11 @@ func IndexFromArchive(archive io.ReadCloser) (apkindex *ApkIndex, err error) {
 			apkindex.Description = string(description)
 		default:
 			if strings.HasPrefix(hdr.Name, ".SIGN.") {
+				var err error
 				apkindex.Signature, err = io.ReadAll(tarReader)
+				if err != nil {
+					return nil, err
+				}
 			} else {
 				return nil, fmt.Errorf("unexpected file found in APKINDEX: %s", hdr.Name)
 			}
@@ -226,7 +228,7 @@ func IndexFromArchive(archive io.ReadCloser) (apkindex *ApkIndex, err error) {
 	return apkindex, nil
 }
 
-func ArchiveFromIndex(apkindex *ApkIndex) (archive io.Reader, err error) {
+func ArchiveFromIndex(apkindex *APKIndex) (archive io.Reader, err error) {
 	// Execute the template and append output for each package in the index
 	var apkindexContents bytes.Buffer
 	for _, pkg := range apkindex.Packages {

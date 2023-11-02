@@ -14,7 +14,7 @@ func TestNewRepositoryFromComponentsBuildsCorrectUri(t *testing.T) {
 		"x86_64",
 	)
 
-	assert.Equal(t, "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64", repo.Uri)
+	assert.Equal(t, "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64", repo.URI)
 }
 
 func TestRepositoryPackageReturnsCorrectUrl(t *testing.T) {
@@ -25,10 +25,10 @@ func TestRepositoryPackageReturnsCorrectUrl(t *testing.T) {
 		},
 		repository: &RepositoryWithIndex{
 			Repository: &Repository{
-				Uri: "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64",
+				URI: "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64",
 			},
 		},
 	}
 
-	assert.Equal(t, "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/test-package-1.2.3-r0.apk", pkg.Url())
+	assert.Equal(t, "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/test-package-1.2.3-r0.apk", pkg.URL())
 }

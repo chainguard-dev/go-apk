@@ -278,9 +278,9 @@ func TestLoadSystemKeyring(t *testing.T) {
 
 func TestFetchPackage(t *testing.T) {
 	var (
-		repo          = Repository{Uri: fmt.Sprintf("%s/%s", testAlpineRepos, testArch)}
+		repo          = Repository{URI: fmt.Sprintf("%s/%s", testAlpineRepos, testArch)}
 		packages      = []*Package{&testPkg}
-		repoWithIndex = repo.WithIndex(&ApkIndex{
+		repoWithIndex = repo.WithIndex(&APKIndex{
 			Packages: packages,
 		})
 		testEtag = "testetag"

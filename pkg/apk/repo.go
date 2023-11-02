@@ -75,11 +75,11 @@ func (n *namedRepositoryWithIndex) Packages() []*RepositoryPackage {
 	return n.repo.Packages()
 }
 func (n *namedRepositoryWithIndex) Source() string {
-	if n.repo == nil || n.repo.IndexUri() == "" {
+	if n.repo == nil || n.repo.IndexURI() == "" {
 		return ""
 	}
 
-	return n.repo.IndexUri()
+	return n.repo.IndexURI()
 }
 
 // repositoryPackage is a package that is part of a repository.
@@ -615,9 +615,9 @@ func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *Repositor
 		jVersionStr := p.getDepVersionForName(pkgs[j], name)
 		if compare != nil {
 			// matching repository
-			pkgRepo := compare.Repository().Uri
-			iRepo := pkgs[i].Repository().Uri
-			jRepo := pkgs[j].Repository().Uri
+			pkgRepo := compare.Repository().URI
+			iRepo := pkgs[i].Repository().URI
+			jRepo := pkgs[j].Repository().URI
 			if iRepo == pkgRepo && jRepo != pkgRepo {
 				return true
 			}

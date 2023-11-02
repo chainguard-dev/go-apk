@@ -831,7 +831,7 @@ type apkCache struct {
 }
 
 func (c *apkCache) get(ctx context.Context, a *APK, pkg *RepositoryPackage) (*expandapk.APKExpanded, error) {
-	u := pkg.Url()
+	u := pkg.URL()
 	// Do all the expensive things inside the once.
 	once, _ := c.onces.LoadOrStore(u, &sync.Once{})
 	once.(*sync.Once).Do(func() {
@@ -908,7 +908,7 @@ func expandPackage(ctx context.Context, a *APK, pkg *RepositoryPackage) (*expand
 }
 
 func packageAsURI(pkg *RepositoryPackage) (uri.URI, error) {
-	u := pkg.Url()
+	u := pkg.URL()
 
 	if strings.HasPrefix(u, "https://") {
 		return uri.Parse(u)
@@ -932,7 +932,7 @@ func (a *APK) FetchPackage(ctx context.Context, pkg *RepositoryPackage) (io.Read
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "fetchPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()
 
-	u := pkg.Url()
+	u := pkg.URL()
 
 	// Normalize the repo as a URI, so that local paths
 	// are translated into file:// URLs, allowing them to be parsed
@@ -1055,7 +1055,7 @@ func (a *APK) datahash(controlTarGz io.Reader) (string, error) {
 func packageRefs(pkgs []*RepositoryPackage) []string {
 	names := make([]string, len(pkgs))
 	for i, pkg := range pkgs {
-		names[i] = fmt.Sprintf("%s (%s) %s", pkg.Name, pkg.Version, pkg.Url())
+		names[i] = fmt.Sprintf("%s (%s) %s", pkg.Name, pkg.Version, pkg.URL())
 	}
 	return names
 }

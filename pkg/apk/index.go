@@ -45,7 +45,7 @@ var signatureFileRegex = regexp.MustCompile(`^\.SIGN\.RSA\.(.*\.rsa\.pub)$`)
 var globalIndexCache = &indexCache{}
 
 type indexResult struct {
-	idx *ApkIndex
+	idx *APKIndex
 	err error
 }
 
@@ -57,7 +57,7 @@ type indexCache struct {
 	indexes sync.Map
 }
 
-func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*ApkIndex, error) {
+func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
 	// Do all the expensive things inside the once.
 	once, _ := i.onces.LoadOrStore(u, &sync.Once{})
 	once.(*sync.Once).Do(func() {
@@ -124,13 +124,13 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 			continue
 		}
 
-		repoRef := Repository{Uri: repoBase}
+		repoRef := Repository{URI: repoBase}
 		indexes = append(indexes, NewNamedRepositoryWithIndex(repoName, repoRef.WithIndex(index)))
 	}
 	return indexes, nil
 }
 
-func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*ApkIndex, error) {
+func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
 	// Normalize the repo as a URI, so that local paths
 	// are translated into file:// URLs, allowing them to be parsed
 	// into a url.URL{}.

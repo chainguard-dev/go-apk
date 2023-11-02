@@ -6,40 +6,40 @@ import (
 )
 
 type Repository struct {
-	Uri string
+	URI string
 }
 
 // NewRepositoryFromComponents creates a new Repository with the uri constructed
 // from the individual components
-func NewRepositoryFromComponents(baseUri, release, repo, arch string) Repository {
+func NewRepositoryFromComponents(baseURI, release, repo, arch string) Repository {
 	return Repository{
-		Uri: fmt.Sprintf("%s/%s/%s/%s", baseUri, release, repo, arch),
+		URI: fmt.Sprintf("%s/%s/%s/%s", baseURI, release, repo, arch),
 	}
 }
 
 // WithIndex returns a RepositoryWithIndex object with the
-func (r *Repository) WithIndex(index *ApkIndex) *RepositoryWithIndex {
+func (r *Repository) WithIndex(index *APKIndex) *RepositoryWithIndex {
 	return &RepositoryWithIndex{
 		Repository: r,
 		index:      index,
 	}
 }
 
-// IndexUri returns the uri of the APKINDEX for this repository
-func (r *Repository) IndexUri() string {
-	return fmt.Sprintf("%s/APKINDEX.tar.gz", r.Uri)
+// IndexURI returns the uri of the APKINDEX for this repository
+func (r *Repository) IndexURI() string {
+	return fmt.Sprintf("%s/APKINDEX.tar.gz", r.URI)
 }
 
 // IsRemote returns whether the repository is considered remote and needs to be
 // fetched over http(s)
 func (r *Repository) IsRemote() bool {
-	return !strings.HasPrefix(r.Uri, "/")
+	return !strings.HasPrefix(r.URI, "/")
 }
 
 // RepositoryWithIndex represents a repository with the index read and parsed
 type RepositoryWithIndex struct {
 	*Repository
-	index *ApkIndex
+	index *APKIndex
 }
 
 // Packages returns a list of RepositoryPackage in this repository
@@ -63,7 +63,7 @@ func (r *RepositoryWithIndex) Count() int {
 // RepoAbbr returns a short name of this repository consiting of the repo name
 // and the architecture.
 func (r *RepositoryWithIndex) RepoAbbr() string {
-	parts := strings.Split(r.Uri, "/")
+	parts := strings.Split(r.URI, "/")
 	return strings.Join(parts[len(parts)-2:], "/")
 }
 
@@ -79,8 +79,8 @@ func NewRepositoryPackage(pkg *Package, repo *RepositoryWithIndex) *RepositoryPa
 	}
 }
 
-func (rp *RepositoryPackage) Url() string {
-	return fmt.Sprintf("%s/%s", rp.repository.Uri, rp.Filename())
+func (rp *RepositoryPackage) URL() string {
+	return fmt.Sprintf("%s/%s", rp.repository.URI, rp.Filename())
 }
 
 func (rp *RepositoryPackage) Repository() *RepositoryWithIndex {

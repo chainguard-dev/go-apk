@@ -373,7 +373,7 @@ func testGetPackagesAndIndex() ([]*RepositoryPackage, []*RepositoryWithIndex) {
 		repoPackages = append(repoPackages, &RepositoryPackage{Package: pkg})
 	}
 	repo := Repository{}
-	repoWithIndex := repo.WithIndex(&ApkIndex{
+	repoWithIndex := repo.WithIndex(&APKIndex{
 		Packages: packages,
 	})
 	return repoPackages, []*RepositoryWithIndex{repoWithIndex}
@@ -609,7 +609,7 @@ func TestResolvePackage(t *testing.T) {
 // Make sure that all versions exist
 func TestVersionHierarchy(t *testing.T) {
 	repo := Repository{}
-	index := repo.WithIndex(&ApkIndex{
+	index := repo.WithIndex(&APKIndex{
 		Packages: []*Package{
 			{Name: "multi-versioner", Version: "1.2.3-r0"},
 			{Name: "multi-versioner", Version: "1.3.6-r0"},
@@ -695,13 +695,13 @@ func TestSortPackages(t *testing.T) {
 				// this only works because the sorting algorithm does not look at or depend upon InstalledSize.
 				// if we ever change that, we'll need to change this test.
 				pkg.pkg.InstalledSize = uint64(pkg.order)
-				pkgs = append(pkgs, NewRepositoryPackage(pkg.pkg, &RepositoryWithIndex{Repository: &Repository{Uri: pkg.repo}}))
+				pkgs = append(pkgs, NewRepositoryPackage(pkg.pkg, &RepositoryWithIndex{Repository: &Repository{URI: pkg.repo}}))
 			}
 			if tt.compare != nil {
-				pkg = NewRepositoryPackage(tt.compare.pkg, &RepositoryWithIndex{Repository: &Repository{Uri: tt.compare.repo}})
+				pkg = NewRepositoryPackage(tt.compare.pkg, &RepositoryWithIndex{Repository: &Repository{URI: tt.compare.repo}})
 			}
 			for _, pkg := range tt.existing {
-				existing[pkg.pkg.Name] = NewRepositoryPackage(pkg.pkg, &RepositoryWithIndex{Repository: &Repository{Uri: pkg.repo}})
+				existing[pkg.pkg.Name] = NewRepositoryPackage(pkg.pkg, &RepositoryWithIndex{Repository: &Repository{URI: pkg.repo}})
 			}
 			namedPkgs := testNamedPackageFromPackages(pkgs)
 			pr := NewPkgResolver(context.Background(), []NamedIndex{})
@@ -731,7 +731,7 @@ func testNamedPackageFromVersionAndPin(version, pin string) *repositoryPackage {
 	rp := NewRepositoryPackage(
 		&Package{Version: version},
 		&RepositoryWithIndex{
-			Repository: &Repository{Uri: "local"},
+			Repository: &Repository{URI: "local"},
 		},
 	)
 	return &repositoryPackage{
