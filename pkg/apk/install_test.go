@@ -25,7 +25,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.alpinelinux.org/alpine/go/repository"
 )
 
 type testDirEntry struct {
@@ -155,7 +154,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			finalContent := []byte("extra long I am here")
 			overwriteFilename := "etc/doublewrite" //nolint:goconst
 
-			pkg := &repository.Package{Name: "first", Origin: "first"}
+			pkg := &Package{Name: "first", Origin: "first"}
 
 			entries := []testDirEntry{
 				{"etc", 0o755, true, nil, nil},
@@ -192,7 +191,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			finalContent := []byte("extra long I am here")
 			overwriteFilename := "etc/doublewrite"
 
-			pkg := &repository.Package{Name: "first", Origin: "first"}
+			pkg := &Package{Name: "first", Origin: "first"}
 
 			entries := []testDirEntry{
 				{"etc", 0755, true, nil, nil},
@@ -233,7 +232,7 @@ func TestInstallAPKFiles(t *testing.T) {
 				{"etc", 0o755, true, nil, nil},
 				{overwriteFilename, 0o755, false, originalContent, nil},
 			}
-			pkg := &repository.Package{Name: "first", Origin: "first"}
+			pkg := &Package{Name: "first", Origin: "first"}
 
 			r := testCreateTarForPackage(entries)
 			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, "")
@@ -264,7 +263,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			originalContent := []byte("hello world")
 			overwriteFilename := "etc/doublewrite"
 
-			pkg := &repository.Package{Name: "first", Origin: "first"}
+			pkg := &Package{Name: "first", Origin: "first"}
 
 			entries := []testDirEntry{
 				{"etc", 0o755, true, nil, nil},

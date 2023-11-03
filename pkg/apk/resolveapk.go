@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/klauspost/compress/gzip"
-	"gitlab.alpinelinux.org/alpine/go/repository"
 
 	"go.opentelemetry.io/otel"
 )
@@ -45,7 +44,7 @@ func (r *noReadAheadApkReader) Read(b []byte) (int, error) {
 }
 
 type APKResolved struct {
-	Package *repository.RepositoryPackage
+	Package *RepositoryPackage
 
 	SignatureSize int
 	SignatureHash []byte

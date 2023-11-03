@@ -33,7 +33,6 @@ import (
 
 	sign "github.com/chainguard-dev/go-apk/pkg/signature"
 	"github.com/hashicorp/go-retryablehttp"
-	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.lsp.dev/uri"
 	"go.opentelemetry.io/otel"
 )
@@ -46,7 +45,7 @@ var signatureFileRegex = regexp.MustCompile(`^\.SIGN\.RSA\.(.*\.rsa\.pub)$`)
 var globalIndexCache = &indexCache{}
 
 type indexResult struct {
-	idx *repository.ApkIndex
+	idx *APKIndex
 	err error
 }
 
@@ -58,7 +57,7 @@ type indexCache struct {
 	indexes sync.Map
 }
 
-func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*repository.ApkIndex, error) {
+func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
 	// Do all the expensive things inside the once.
 	once, _ := i.onces.LoadOrStore(u, &sync.Once{})
 	once.(*sync.Once).Do(func() {
@@ -125,13 +124,13 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 			continue
 		}
 
-		repoRef := repository.Repository{Uri: repoBase}
+		repoRef := Repository{URI: repoBase}
 		indexes = append(indexes, NewNamedRepositoryWithIndex(repoName, repoRef.WithIndex(index)))
 	}
 	return indexes, nil
 }
 
-func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*repository.ApkIndex, error) {
+func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
 	// Normalize the repo as a URI, so that local paths
 	// are translated into file:// URLs, allowing them to be parsed
 	// into a url.URL{}.
@@ -267,7 +266,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 		}
 	}
 	// with a valid signature, convert it to an ApkIndex
-	index, err := repository.IndexFromArchive(io.NopCloser(bytes.NewReader(b)))
+	index, err := IndexFromArchive(io.NopCloser(bytes.NewReader(b)))
 	if err != nil {
 		return nil, fmt.Errorf("unable to read convert repository index bytes to index struct at %s: %w", u, err)
 	}

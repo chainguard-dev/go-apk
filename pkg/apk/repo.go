@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-retryablehttp"
-	"gitlab.alpinelinux.org/alpine/go/repository"
 	"go.opentelemetry.io/otel"
 )
 
@@ -33,7 +32,7 @@ import (
 // need not be unique.
 type NamedIndex interface {
 	Name() string
-	Packages() []*repository.RepositoryPackage
+	Packages() []*RepositoryPackage
 	Source() string
 	Count() int
 }
@@ -48,10 +47,10 @@ func indexNames(indexes []NamedIndex) []string {
 
 type namedRepositoryWithIndex struct {
 	name string
-	repo *repository.RepositoryWithIndex
+	repo *RepositoryWithIndex
 }
 
-func NewNamedRepositoryWithIndex(name string, repo *repository.RepositoryWithIndex) NamedIndex {
+func NewNamedRepositoryWithIndex(name string, repo *RepositoryWithIndex) NamedIndex {
 	return &namedRepositoryWithIndex{
 		name: name,
 		repo: repo,
@@ -69,24 +68,24 @@ func (n *namedRepositoryWithIndex) Count() int {
 	return n.repo.Count()
 }
 
-func (n *namedRepositoryWithIndex) Packages() []*repository.RepositoryPackage {
+func (n *namedRepositoryWithIndex) Packages() []*RepositoryPackage {
 	if n.repo == nil {
 		return nil
 	}
 	return n.repo.Packages()
 }
 func (n *namedRepositoryWithIndex) Source() string {
-	if n.repo == nil || n.repo.IndexUri() == "" {
+	if n.repo == nil || n.repo.IndexURI() == "" {
 		return ""
 	}
 
-	return n.repo.IndexUri()
+	return n.repo.IndexURI()
 }
 
 // repositoryPackage is a package that is part of a repository.
-// it is nearly identical to repository.RepositoryPackage, but it includes the pinned name of the repository.
+// it is nearly identical to RepositoryPackage, but it includes the pinned name of the repository.
 type repositoryPackage struct {
-	*repository.RepositoryPackage
+	*RepositoryPackage
 	pinnedName string
 }
 
@@ -258,13 +257,13 @@ func NewPkgResolver(ctx context.Context, indexes []NamedIndex) *PkgResolver {
 
 // GetPackagesWithDependencies get all of the dependencies for the given packages based on the
 // indexes. Does not filter for installed already or not.
-func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages []string) (toInstall []*repository.RepositoryPackage, conflicts []string, err error) {
+func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages []string) (toInstall []*RepositoryPackage, conflicts []string, err error) {
 	_, span := otel.Tracer("go-apk").Start(ctx, "GetPackageWithDependencies")
 	defer span.End()
 
 	var (
-		dependenciesMap = make(map[string]*repository.RepositoryPackage, len(packages))
-		installTracked  = map[string]*repository.RepositoryPackage{}
+		dependenciesMap = make(map[string]*RepositoryPackage, len(packages))
+		installTracked  = map[string]*RepositoryPackage{}
 	)
 	// first get the explicitly named packages
 	for _, pkgName := range packages {
@@ -313,9 +312,9 @@ func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages 
 // Requires the existing set because the logic for resolving dependencies between competing
 // options may depend on whether or not one already is installed.
 // Must not modify the existing map directly.
-func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[string]*repository.RepositoryPackage) (*repository.RepositoryPackage, []*repository.RepositoryPackage, []string, error) {
+func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[string]*RepositoryPackage) (*RepositoryPackage, []*RepositoryPackage, []string, error) {
 	parents := make(map[string]bool)
-	localExisting := make(map[string]*repository.RepositoryPackage, len(existing))
+	localExisting := make(map[string]*RepositoryPackage, len(existing))
 	for k, v := range existing {
 		localExisting[k] = v
 	}
@@ -335,8 +334,8 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 		return nil, nil, nil, err
 	}
 	// eliminate duplication in dependencies
-	added := make(map[string]*repository.RepositoryPackage, len(deps))
-	dependencies := make([]*repository.RepositoryPackage, 0, len(deps))
+	added := make(map[string]*RepositoryPackage, len(deps))
+	dependencies := make([]*RepositoryPackage, 0, len(deps))
 	for _, dep := range deps {
 		if _, ok := added[dep.Name]; !ok {
 			dependencies = append(dependencies, dep)
@@ -386,7 +385,7 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 // that satisfy the constraint. The list will be sorted by version number, with the highest version first
 // and decreasing from there. In general, the first one in the list is the best match. This function
 // returns multiple in case you need to see all potential matches.
-func (p *PkgResolver) ResolvePackage(pkgName string) ([]*repository.RepositoryPackage, error) {
+func (p *PkgResolver) ResolvePackage(pkgName string) ([]*RepositoryPackage, error) {
 	stuff := p.resolvePackageNameVersionPin(pkgName)
 	name, version, compare, pin := stuff.name, stuff.version, stuff.dep, stuff.pin
 	pkgsWithVersions, ok := p.nameMap[name]
@@ -408,7 +407,7 @@ func (p *PkgResolver) ResolvePackage(pkgName string) ([]*repository.RepositoryPa
 		p.sortPackages(providers, nil, name, nil, "")
 		packages = providers
 	}
-	pkgs := make([]*repository.RepositoryPackage, 0, len(packages))
+	pkgs := make([]*RepositoryPackage, 0, len(packages))
 	for _, pkg := range packages {
 		pkgs = append(pkgs, pkg.RepositoryPackage)
 	}
@@ -443,7 +442,7 @@ func (p *PkgResolver) ResolvePackage(pkgName string) ([]*repository.RepositoryPa
 // It might change the order of install.
 // In other words, this _should_ be a DAG (acyclical), but because the packages
 // are just listing dependencies in text, it might be cyclical. We need to be careful of that.
-func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, allowPin string, allowSelfFulfill bool, parents map[string]bool, existing map[string]*repository.RepositoryPackage) (dependencies []*repository.RepositoryPackage, conflicts []string, err error) {
+func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin string, allowSelfFulfill bool, parents map[string]bool, existing map[string]*RepositoryPackage) (dependencies []*RepositoryPackage, conflicts []string, err error) {
 	// check if the package we are checking is one of our parents, avoid cyclical graphs
 	if _, ok := parents[pkg.Name]; ok {
 		return nil, nil, nil
@@ -461,7 +460,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *repository.RepositoryPackage, 
 	// - name      - "I need package 'name'" -OR- "I need the package that provides <name>"
 	for _, dep := range pkg.Dependencies {
 		var (
-			depPkg *repository.RepositoryPackage
+			depPkg *RepositoryPackage
 			ok     bool
 		)
 		// if it was a conflict, just add it to the conflicts list and go to the next one
@@ -602,7 +601,7 @@ func (p *PkgResolver) resolvePackageNameVersionPin(pkgName string) pinStuff {
 // For example, if the original search was for package "a", then pkgs may contain some that
 // are named "a", but others that provided "a". In that case, we should look not at the
 // version of the package, but the version of "a" that the package provides.
-func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *repository.RepositoryPackage, name string, existing map[string]*repository.RepositoryPackage, pin string) { //nolint:gocyclo
+func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *RepositoryPackage, name string, existing map[string]*RepositoryPackage, pin string) { //nolint:gocyclo
 	// get existing origins
 	existingOrigins := make(map[string]bool, len(existing))
 	for _, pkg := range existing {
@@ -616,9 +615,9 @@ func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *repositor
 		jVersionStr := p.getDepVersionForName(pkgs[j], name)
 		if compare != nil {
 			// matching repository
-			pkgRepo := compare.Repository().Uri
-			iRepo := pkgs[i].Repository().Uri
-			jRepo := pkgs[j].Repository().Uri
+			pkgRepo := compare.Repository().URI
+			iRepo := pkgs[i].Repository().URI
+			jRepo := pkgs[j].Repository().URI
 			if iRepo == pkgRepo && jRepo != pkgRepo {
 				return true
 			}

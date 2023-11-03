@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.alpinelinux.org/alpine/go/repository"
 	"golang.org/x/sync/errgroup"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
@@ -301,7 +300,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 	})
 }
 
-func testGetPackagesAndIndex() ([]*repository.RepositoryPackage, []*repository.RepositoryWithIndex) {
+func testGetPackagesAndIndex() ([]*RepositoryPackage, []*RepositoryWithIndex) {
 	// create a tree of packages, including some multiple that depend on the same one
 	// but no circular dependencies; this is an acyclic graph
 	// dependency chain:
@@ -339,7 +338,7 @@ func testGetPackagesAndIndex() ([]*repository.RepositoryPackage, []*repository.R
 	// we get
 	// dep4, dep5, dep1, dep6, foo, libq, dep3, busybox, dep2
 	var (
-		packages = []*repository.Package{
+		packages = []*Package{
 			{Name: "package1", Version: "1.0.0", Dependencies: []string{"dep1", "dep2", "dep3"}},
 			{Name: "dep1", Version: "1.0.0", Dependencies: []string{"dep4", "dep5"}},
 			{Name: "dep2", Version: "1.0.0", Dependencies: []string{"dep3", "/bin/sh"}},
@@ -367,17 +366,17 @@ func testGetPackagesAndIndex() ([]*repository.RepositoryPackage, []*repository.R
 			{Name: "package9", Version: "2.0.0", Dependencies: []string{"package5"}},
 			{Name: "abc9", Version: "2.0.0", Dependencies: []string{"package5"}},
 		}
-		repoPackages = make([]*repository.RepositoryPackage, 0, len(packages))
+		repoPackages = make([]*RepositoryPackage, 0, len(packages))
 	)
 
 	for _, pkg := range packages {
-		repoPackages = append(repoPackages, &repository.RepositoryPackage{Package: pkg})
+		repoPackages = append(repoPackages, &RepositoryPackage{Package: pkg})
 	}
-	repo := repository.Repository{}
-	repoWithIndex := repo.WithIndex(&repository.ApkIndex{
+	repo := Repository{}
+	repoWithIndex := repo.WithIndex(&APKIndex{
 		Packages: packages,
 	})
-	return repoPackages, []*repository.RepositoryWithIndex{repoWithIndex}
+	return repoPackages, []*RepositoryWithIndex{repoWithIndex}
 }
 
 func TestGetPackagesWithDependences(t *testing.T) {
@@ -532,7 +531,7 @@ func TestGetPackageDependencies(t *testing.T) {
 		// now make something pre-existing
 		expectedName = "package5-special"
 		expectedVersion = "1.2.0" // lower version than the highest
-		existingPkgs := make(map[string]*repository.RepositoryPackage)
+		existingPkgs := make(map[string]*RepositoryPackage)
 		for _, p := range origPkgs {
 			if p.Name == expectedName && p.Version == expectedVersion {
 				existingPkgs[p.Name] = p
@@ -609,9 +608,9 @@ func TestResolvePackage(t *testing.T) {
 
 // Make sure that all versions exist
 func TestVersionHierarchy(t *testing.T) {
-	repo := repository.Repository{}
-	index := repo.WithIndex(&repository.ApkIndex{
-		Packages: []*repository.Package{
+	repo := Repository{}
+	index := repo.WithIndex(&APKIndex{
+		Packages: []*Package{
 			{Name: "multi-versioner", Version: "1.2.3-r0"},
 			{Name: "multi-versioner", Version: "1.3.6-r0"},
 			{Name: "multi-versioner", Version: "1.2.8-r0"},
@@ -620,7 +619,7 @@ func TestVersionHierarchy(t *testing.T) {
 			{Name: "multi-versioner", Version: "2.0.6-r0"},
 		},
 	})
-	resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes([]*repository.RepositoryWithIndex{index}))
+	resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes([]*RepositoryWithIndex{index}))
 	pkgWithVersions, ok := resolver.nameMap["multi-versioner"]
 	require.True(t, ok, "found multi-versioner in nameMap")
 	for i, pkg := range pkgWithVersions {
@@ -632,7 +631,7 @@ func TestSortPackages(t *testing.T) {
 	// we are not looking for a whole dependency graph; just for the specific tests we want
 	// around resolving dependency A vs B
 	type repoPkgBase struct {
-		pkg   *repository.Package
+		pkg   *Package
 		repo  string
 		order int
 	}
@@ -643,66 +642,66 @@ func TestSortPackages(t *testing.T) {
 		existing []repoPkgBase
 	}{
 		{"just versions", []repoPkgBase{
-			{&repository.Package{Name: "package1", Version: "1.0.0"}, "http://a.b.com", 2},
-			{&repository.Package{Name: "package1", Version: "2.0.1"}, "http://a.b.com", 0},
-			{&repository.Package{Name: "package1", Version: "1.2.0abc"}, "http://a.b.com", 3},
-			{&repository.Package{Name: "package1", Version: "1.2.0"}, "http://a.b.com", 1},
+			{&Package{Name: "package1", Version: "1.0.0"}, "http://a.b.com", 2},
+			{&Package{Name: "package1", Version: "2.0.1"}, "http://a.b.com", 0},
+			{&Package{Name: "package1", Version: "1.2.0abc"}, "http://a.b.com", 3},
+			{&Package{Name: "package1", Version: "1.2.0"}, "http://a.b.com", 1},
 		}, nil, nil},
 		{"just names", []repoPkgBase{
-			{&repository.Package{Name: "package1", Version: "1.0.0"}, "http://a.b.com", 1},
-			{&repository.Package{Name: "package2", Version: "1.0.0"}, "http://a.b.com", 2},
-			{&repository.Package{Name: "earlier", Version: "1.0.0"}, "http://a.b.com", 0},
+			{&Package{Name: "package1", Version: "1.0.0"}, "http://a.b.com", 1},
+			{&Package{Name: "package2", Version: "1.0.0"}, "http://a.b.com", 2},
+			{&Package{Name: "earlier", Version: "1.0.0"}, "http://a.b.com", 0},
 		}, nil, nil},
 		{"just origins", []repoPkgBase{
-			{&repository.Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://a.b.com", 2},
-			{&repository.Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://a.b.com", 1},
-			{&repository.Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 0},
-		}, &repoPkgBase{&repository.Package{Origin: "a"}, "", 0}, nil},
+			{&Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://a.b.com", 2},
+			{&Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://a.b.com", 1},
+			{&Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 0},
+		}, &repoPkgBase{&Package{Origin: "a"}, "", 0}, nil},
 		{"just repositories", []repoPkgBase{
-			{&repository.Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://other.com", 2},
-			{&repository.Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://example.com", 1},
-			{&repository.Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 0},
-		}, &repoPkgBase{&repository.Package{Origin: "a"}, "http://a.b.com", 0}, nil},
+			{&Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://other.com", 2},
+			{&Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://example.com", 1},
+			{&Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 0},
+		}, &repoPkgBase{&Package{Origin: "a"}, "http://a.b.com", 0}, nil},
 		{"just existing", []repoPkgBase{
-			{&repository.Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://other.com", 0},
-			{&repository.Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://example.com", 1},
-			{&repository.Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 2},
+			{&Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://other.com", 0},
+			{&Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://example.com", 1},
+			{&Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 2},
 		}, nil, []repoPkgBase{
-			{&repository.Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://other.com", 0},
+			{&Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://other.com", 0},
 		}},
 		{"origins and versions", []repoPkgBase{
-			{&repository.Package{Name: "package1", Version: "1.0.0", Origin: "a"}, "http://a.b.com", 1},
-			{&repository.Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://a.b.com", 2},
-			{&repository.Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 0},
-		}, &repoPkgBase{&repository.Package{Origin: "a"}, "", 0}, nil},
+			{&Package{Name: "package1", Version: "1.0.0", Origin: "a"}, "http://a.b.com", 1},
+			{&Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://a.b.com", 2},
+			{&Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 0},
+		}, &repoPkgBase{&Package{Origin: "a"}, "", 0}, nil},
 		{"origins and repositories and versions", []repoPkgBase{
-			{&repository.Package{Name: "package1", Version: "1.0.0", Origin: "a"}, "http://a.b.com", 1},
-			{&repository.Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://other.com", 4},
-			{&repository.Package{Name: "package1", Version: "2.0.0", Origin: "b"}, "http://other.com", 5},
-			{&repository.Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://a.b.com", 2},
-			{&repository.Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://example.com", 3},
-			{&repository.Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 0},
-		}, &repoPkgBase{&repository.Package{Origin: "a"}, "http://a.b.com", 0}, nil},
+			{&Package{Name: "package1", Version: "1.0.0", Origin: "a"}, "http://a.b.com", 1},
+			{&Package{Name: "package1", Version: "2.0.1", Origin: "b"}, "http://other.com", 4},
+			{&Package{Name: "package1", Version: "2.0.0", Origin: "b"}, "http://other.com", 5},
+			{&Package{Name: "package1", Version: "1.0.0", Origin: "c"}, "http://a.b.com", 2},
+			{&Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://example.com", 3},
+			{&Package{Name: "package1", Version: "1.2.0", Origin: "a"}, "http://a.b.com", 0},
+		}, &repoPkgBase{&Package{Origin: "a"}, "http://a.b.com", 0}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var (
-				pkgs     []*repository.RepositoryPackage
-				pkg      *repository.RepositoryPackage
-				existing = map[string]*repository.RepositoryPackage{}
+				pkgs     []*RepositoryPackage
+				pkg      *RepositoryPackage
+				existing = map[string]*RepositoryPackage{}
 			)
 			for _, pkg := range tt.pkgs {
 				// we cheat and use the InstalledSize for the preferred order, so that it gets carried around.
 				// this only works because the sorting algorithm does not look at or depend upon InstalledSize.
 				// if we ever change that, we'll need to change this test.
 				pkg.pkg.InstalledSize = uint64(pkg.order)
-				pkgs = append(pkgs, repository.NewRepositoryPackage(pkg.pkg, &repository.RepositoryWithIndex{Repository: &repository.Repository{Uri: pkg.repo}}))
+				pkgs = append(pkgs, NewRepositoryPackage(pkg.pkg, &RepositoryWithIndex{Repository: &Repository{URI: pkg.repo}}))
 			}
 			if tt.compare != nil {
-				pkg = repository.NewRepositoryPackage(tt.compare.pkg, &repository.RepositoryWithIndex{Repository: &repository.Repository{Uri: tt.compare.repo}})
+				pkg = NewRepositoryPackage(tt.compare.pkg, &RepositoryWithIndex{Repository: &Repository{URI: tt.compare.repo}})
 			}
 			for _, pkg := range tt.existing {
-				existing[pkg.pkg.Name] = repository.NewRepositoryPackage(pkg.pkg, &repository.RepositoryWithIndex{Repository: &repository.Repository{Uri: pkg.repo}})
+				existing[pkg.pkg.Name] = NewRepositoryPackage(pkg.pkg, &RepositoryWithIndex{Repository: &Repository{URI: pkg.repo}})
 			}
 			namedPkgs := testNamedPackageFromPackages(pkgs)
 			pr := NewPkgResolver(context.Background(), []NamedIndex{})
@@ -714,14 +713,14 @@ func TestSortPackages(t *testing.T) {
 	}
 }
 
-func testNamedRepositoryFromIndexes(indexes []*repository.RepositoryWithIndex) (named []NamedIndex) {
+func testNamedRepositoryFromIndexes(indexes []*RepositoryWithIndex) (named []NamedIndex) {
 	for _, index := range indexes {
 		named = append(named, NewNamedRepositoryWithIndex("", index))
 	}
 	return
 }
 
-func testNamedPackageFromPackages(pkgs []*repository.RepositoryPackage) (named []*repositoryPackage) {
+func testNamedPackageFromPackages(pkgs []*RepositoryPackage) (named []*repositoryPackage) {
 	for _, pkg := range pkgs {
 		named = append(named, &repositoryPackage{RepositoryPackage: pkg})
 	}
@@ -729,10 +728,10 @@ func testNamedPackageFromPackages(pkgs []*repository.RepositoryPackage) (named [
 }
 
 func testNamedPackageFromVersionAndPin(version, pin string) *repositoryPackage {
-	rp := repository.NewRepositoryPackage(
-		&repository.Package{Version: version},
-		&repository.RepositoryWithIndex{
-			Repository: &repository.Repository{Uri: "local"},
+	rp := NewRepositoryPackage(
+		&Package{Version: version},
+		&RepositoryWithIndex{
+			Repository: &Repository{URI: "local"},
 		},
 	)
 	return &repositoryPackage{
