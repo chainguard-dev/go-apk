@@ -17,12 +17,12 @@ package tarfs
 import (
 	"archive/tar"
 	"bufio"
-	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"path"
+	"strings"
 	"time"
 
 	"golang.org/x/exp/slices"
@@ -216,7 +216,7 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	}
 
 	slices.SortFunc(children, func(a, b fs.DirEntry) int {
-		return cmp.Compare(a.Name(), b.Name())
+		return strings.Compare(a.Name(), b.Name())
 	})
 
 	return children, nil
