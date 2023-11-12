@@ -95,6 +95,8 @@ func ParsePackage(ctx context.Context, apkPackage io.Reader) (*Package, error) {
 		return nil, fmt.Errorf("expandApk(): %v", err)
 	}
 
+	defer expanded.Close()
+
 	control, err := expanded.ControlData()
 	if err != nil {
 		return nil, fmt.Errorf("expanded.ControlData(): %v", err)
@@ -114,6 +116,9 @@ func ParsePackage(ctx context.Context, apkPackage io.Reader) (*Package, error) {
 		return nil, fmt.Errorf("cfg.MapTo(): %w", err)
 	}
 	pkg.BuildTime = time.Unix(pkg.BuildDate, 0).UTC()
+	pkg.InstalledSize = pkg.Size
+	pkg.Size = uint64(expanded.Size)
+	pkg.Checksum = expanded.ControlHash
 
 	return pkg, nil
 }
