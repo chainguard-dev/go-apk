@@ -10,7 +10,6 @@ import (
 )
 
 func TestParsePackage(t *testing.T) {
-
 	for _, c := range []struct {
 		apk  string
 		want *Package
