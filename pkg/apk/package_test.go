@@ -62,7 +62,6 @@ func TestParsePackage(t *testing.T) {
 			if d := cmp.Diff(c.want, got); d != "" {
 				t.Errorf("ParsePackage() mismatch (-want  got):\n%s", d)
 			}
-
 		})
 	}
 }
