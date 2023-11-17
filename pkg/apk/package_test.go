@@ -47,6 +47,21 @@ func TestParsePackage(t *testing.T) {
 			BuildTime:     time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC),
 			BuildDate:     0,
 		},
+	}, {
+		apk: "replaces/replaces-0.0.1-r0.apk",
+		want: &Package{
+			Name:          "replaces",
+			Version:       "0.0.1-r0",
+			Arch:          "aarch64",
+			Description:   "testdata with multiple replaces",
+			Origin:        "replaces",
+			Checksum:      []byte{0x7c, 0x71, 0x38, 0x02, 0xc8, 0xde, 0x5d, 0x50, 0xfe, 0xda, 0x41, 0xe0, 0xec, 0x01, 0xef, 0x18, 0x33, 0x7e, 0x14, 0xf8},
+			Replaces:      []string{"foo", "bar"},
+			Size:          1477,
+			InstalledSize: 2532,
+			BuildTime:     time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC),
+			BuildDate:     0,
+		},
 	}} {
 		t.Run(c.apk, func(t *testing.T) {
 			f, err := os.Open("testdata/" + c.apk)

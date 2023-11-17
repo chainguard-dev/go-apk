@@ -84,7 +84,7 @@ func buildInstalledFilePackageMapping(installed []*InstalledPackage) map[string]
 // installRegularFile handles the various error modes of writing a regular file
 func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader,
 	tmpDir string, origin string,
-	replaces string, installedMap map[string][]*InstalledPackage) error {
+	replaces map[string]struct{}, installedMap map[string][]*InstalledPackage) error {
 	checksum, err := checksumFromHeader(header)
 	if err != nil {
 		return err
@@ -149,7 +149,8 @@ func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader,
 		packages, ok := installedMap[header.Name]
 		if ok {
 			for _, pk := range packages {
-				if pk.Origin != origin && pk.Name != replaces {
+				_, isReplaced := replaces[pk.Name]
+				if pk.Origin != origin && !isReplaced {
 					continue
 				}
 				found = true
@@ -191,9 +192,14 @@ func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader,
 // installAPKFiles install the files from the APK and return the list of installed files
 // and their permissions. Returns a tar.Header because it is a convenient existing
 // struct that has all of the fields we need.
-func (a *APK) installAPKFiles(ctx context.Context, in io.Reader, origin, replaces string) ([]tar.Header, error) {
+func (a *APK) installAPKFiles(ctx context.Context, in io.Reader, origin string, replaces []string) ([]tar.Header, error) {
 	_, span := otel.Tracer("go-apk").Start(ctx, "installAPKFiles")
 	defer span.End()
+
+	replaceMap := map[string]struct{}{}
+	for _, r := range replaces {
+		replaceMap[r] = struct{}{}
+	}
 
 	var files []tar.Header
 	tmpDir, err := os.MkdirTemp("", "apk-install")
@@ -260,7 +266,7 @@ func (a *APK) installAPKFiles(ctx context.Context, in io.Reader, origin, replace
 			}
 
 		case tar.TypeReg:
-			err = a.installRegularFile(header, tr, tmpDir, origin, replaces, installedMap)
+			err = a.installRegularFile(header, tr, tmpDir, origin, replaceMap, installedMap)
 			if err != nil {
 				return nil, err
 			}

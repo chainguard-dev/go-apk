@@ -67,9 +67,6 @@ var apkIndexTemplate = template.Must(template.New(apkIndexFilename).Funcs(
 		{{- if .Provides}}
 		p:{{join .Provides}}
 		{{- end}}
-		{{- if .Replaces}}
-		r:{{.Replaces}}
-		{{- end}}
 		{{- if .ProviderPriority}}
 		k:{{.ProviderPriority}}
 		{{- end}}
@@ -84,7 +81,7 @@ type APKIndex struct { //nolint:revive
 
 // ParsePackageIndex parses a plain (uncompressed) APKINDEX file. It returns an
 // ApkIndex struct
-func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) { //nolint:gocyclo
+func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 	if closer, ok := apkIndexUnpacked.(io.Closer); ok {
 		defer closer.Close()
 	}
@@ -135,8 +132,6 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) { //nolin
 			pkg.Provides = strings.Split(val, " ")
 		case "c":
 			pkg.RepoCommit = val
-		case "r":
-			pkg.Replaces = val
 		case "t":
 			i, err := strconv.ParseInt(val, 10, 64)
 			if err != nil {
