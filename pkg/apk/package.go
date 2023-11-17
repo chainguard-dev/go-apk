@@ -28,8 +28,6 @@ import (
 )
 
 // PackageToIndex takes a Package and returns it as the string representation of lines in an index file.
-//
-// TODO(jason): This should take our Package type, and not alpine-go's. This requires pulling in a fork of RepositoryPackage.
 func PackageToIndex(pkg *Package) (out []string) {
 	out = append(out, fmt.Sprintf("P:%s", pkg.Name))
 	out = append(out, fmt.Sprintf("V:%s", pkg.Version))
@@ -73,9 +71,9 @@ type Package struct {
 	InstalledSize    uint64
 	ProviderPriority uint64
 	BuildTime        time.Time
-	BuildDate        int64  `ini:"builddate"`
-	RepoCommit       string `ini:"commit"`
-	Replaces         string `ini:"replaces"`
+	BuildDate        int64    `ini:"builddate"`
+	RepoCommit       string   `ini:"commit"`
+	Replaces         []string `ini:"replaces,,allowshadow"`
 }
 
 // Returns the package filename as it's named in a repository.

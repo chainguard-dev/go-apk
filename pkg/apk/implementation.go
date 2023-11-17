@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/chainguard-dev/go-apk/pkg/expandapk"
+	"gopkg.in/ini.v1"
 
 	"go.lsp.dev/uri"
 	"go.opentelemetry.io/otel"
@@ -982,6 +983,25 @@ type writeHeaderer interface {
 	WriteHeader(hdr tar.Header, tfs fs.FS, pkg *Package) error
 }
 
+func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
+	f, err := exp.ControlFS.Open(".PKGINFO")
+	if err != nil {
+		return nil, fmt.Errorf("opening .PKGINFO in %s: %w", exp.ControlFile, err)
+	}
+
+	cfg, err := ini.ShadowLoad(f)
+	if err != nil {
+		return nil, fmt.Errorf("ini.ShadowLoad(): %w", err)
+	}
+
+	pkg := new(Package)
+	if err = cfg.MapTo(pkg); err != nil {
+		return nil, fmt.Errorf("cfg.MapTo(): %w", err)
+	}
+
+	return pkg, nil
+}
+
 // installPackage installs a single package and updates installed db.
 func (a *APK) installPackage(ctx context.Context, pkg *RepositoryPackage, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) error {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
@@ -991,10 +1011,26 @@ func (a *APK) installPackage(ctx context.Context, pkg *RepositoryPackage, expand
 
 	defer expanded.Close()
 
-	var (
-		installedFiles []tar.Header
-		err            error
-	)
+	// TODO: Clean this up.
+	//
+	// This is silly, but we had previously made three mistakes:
+	// 1. We assumed that APKINDEX contained "r:" lines for "replaces".
+	// 2. We assumed that Replaces was only a single string.
+	// 3. We failed to populate the installed db with "r:".
+	//
+	// 1 + 2 leads to us failing to install certain packages, so that is most urgent.
+	// We fix that by replacing the APKINDEX "r:" lines with what we parsed from .PKGINFO.
+	//
+	// However, fixing 3 will modify the contents of the installed db, which affect
+	// the digests of everything, and I don't want to deal with fixing that right now.
+	pkgInfo, err := packageInfo(expanded)
+	if err != nil {
+		return fmt.Errorf("failed to read .PKGINFO for %s: %w", pkg.Name, err)
+	}
+
+	pkg.Replaces = pkgInfo.Replaces
+
+	var installedFiles []tar.Header
 
 	if wh, ok := a.fs.(writeHeaderer); ok {
 		installedFiles, err = a.lazilyInstallAPKFiles(ctx, wh, expanded.TarFS, pkg.Package)

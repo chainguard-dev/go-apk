@@ -12,3 +12,6 @@ Notably:
     * `cache/alpine-baselayout-3.4.0-r0.apk`
     * `cache/alpine-baselayout-3.2.0-r23.apk` - a copy of `alpine-baselayout-3.4.0-r0.apk`, but with different versions. It should not be read, only used to validate that this one is read versus the one in the root of this directory.
 * `root/lib/apk/db/` - prebuilt contents of what should be in a filesystem, to compare the results of tests.
+* `replaces/`
+    * `melange.yaml` - melange config to build the apk
+    * `replaces-0.0.1-r0` - APK with multiple `replaces = ` lines
