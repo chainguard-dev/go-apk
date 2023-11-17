@@ -27,8 +27,8 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-// PackageToIndex takes a Package and returns it as the string representation of lines in an index file.
-func PackageToIndex(pkg *Package) (out []string) {
+// PackageToInstalled takes a Package and returns it as the string representation of lines in a /lib/apk/db/installed file.
+func PackageToInstalled(pkg *Package) (out []string) {
 	out = append(out, fmt.Sprintf("P:%s", pkg.Name))
 	out = append(out, fmt.Sprintf("V:%s", pkg.Version))
 	out = append(out, fmt.Sprintf("A:%s", pkg.Arch))
@@ -39,6 +39,7 @@ func PackageToIndex(pkg *Package) (out []string) {
 	out = append(out, fmt.Sprintf("U:%s", pkg.URL))
 	out = append(out, fmt.Sprintf("D:%s", strings.Join(pkg.Dependencies, " ")))
 	out = append(out, fmt.Sprintf("p:%s", strings.Join(pkg.Provides, " ")))
+	out = append(out, fmt.Sprintf("r:%s", strings.Join(pkg.Replaces, " ")))
 	out = append(out, fmt.Sprintf("c:%s", pkg.RepoCommit))
 	out = append(out, fmt.Sprintf("i:%s", pkg.InstallIf))
 	out = append(out, fmt.Sprintf("t:%d", pkg.BuildTime.Unix()))

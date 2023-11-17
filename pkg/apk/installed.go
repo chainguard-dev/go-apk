@@ -59,7 +59,7 @@ func (a *APK) addInstalledPackage(pkg *Package, files []tar.Header) error {
 	// sort the files by directory
 	sortedFiles := sortTarHeaders(files)
 	// package lines
-	pkgLines := PackageToIndex(pkg)
+	pkgLines := PackageToInstalled(pkg)
 	// file lines
 	for _, f := range sortedFiles {
 		perm := f.Mode & 0777
