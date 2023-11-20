@@ -587,7 +587,13 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 					continue
 				}
 
-				if err := a.installPackage(gctx, pkg, exp, sourceDateEpoch); err != nil {
+				// The data in .PKGINFO is more complete than what is in APKINDEX.
+				pkgInfo, err := packageInfo(exp)
+				if err != nil {
+					return fmt.Errorf("failed to read .PKGINFO for %s: %w", pkg.Name, err)
+				}
+
+				if err := a.installPackage(gctx, pkgInfo, exp, sourceDateEpoch); err != nil {
 					return fmt.Errorf("installing %s: %w", pkg.Name, err)
 				}
 			}
@@ -1003,7 +1009,7 @@ func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
 }
 
 // installPackage installs a single package and updates installed db.
-func (a *APK) installPackage(ctx context.Context, pkg *RepositoryPackage, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) error {
+func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) error {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "installPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
@@ -1011,29 +1017,13 @@ func (a *APK) installPackage(ctx context.Context, pkg *RepositoryPackage, expand
 
 	defer expanded.Close()
 
-	// TODO: Clean this up.
-	//
-	// This is silly, but we had previously made three mistakes:
-	// 1. We assumed that APKINDEX contained "r:" lines for "replaces".
-	// 2. We assumed that Replaces was only a single string.
-	// 3. We failed to populate the installed db with "r:".
-	//
-	// 1 + 2 leads to us failing to install certain packages, so that is most urgent.
-	// We fix that by replacing the APKINDEX "r:" lines with what we parsed from .PKGINFO.
-	//
-	// However, fixing 3 will modify the contents of the installed db, which affect
-	// the digests of everything, and I don't want to deal with fixing that right now.
-	pkgInfo, err := packageInfo(expanded)
-	if err != nil {
-		return fmt.Errorf("failed to read .PKGINFO for %s: %w", pkg.Name, err)
-	}
-
-	pkg.Replaces = pkgInfo.Replaces
-
-	var installedFiles []tar.Header
+	var (
+		err            error
+		installedFiles []tar.Header
+	)
 
 	if wh, ok := a.fs.(writeHeaderer); ok {
-		installedFiles, err = a.lazilyInstallAPKFiles(ctx, wh, expanded.TarFS, pkg.Package)
+		installedFiles, err = a.lazilyInstallAPKFiles(ctx, wh, expanded.TarFS, pkg)
 		if err != nil {
 			return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 		}
@@ -1056,7 +1046,7 @@ func (a *APK) installPackage(ctx context.Context, pkg *RepositoryPackage, expand
 		return fmt.Errorf("opening control file %q: %w", expanded.ControlFile, err)
 	}
 
-	if err := a.updateScriptsTar(pkg.Package, controlData, sourceDateEpoch); err != nil {
+	if err := a.updateScriptsTar(pkg, controlData, sourceDateEpoch); err != nil {
 		return fmt.Errorf("unable to update scripts.tar for pkg %s: %w", pkg.Name, err)
 	}
 
@@ -1064,12 +1054,12 @@ func (a *APK) installPackage(ctx context.Context, pkg *RepositoryPackage, expand
 	if _, err := controlData.Seek(0, 0); err != nil {
 		return fmt.Errorf("unable to seek to start of control data for pkg %s: %w", pkg.Name, err)
 	}
-	if err := a.updateTriggers(pkg.Package, controlData); err != nil {
+	if err := a.updateTriggers(pkg, controlData); err != nil {
 		return fmt.Errorf("unable to update triggers for pkg %s: %w", pkg.Name, err)
 	}
 
 	// update the installed file
-	if err := a.addInstalledPackage(pkg.Package, installedFiles); err != nil {
+	if err := a.addInstalledPackage(pkg, installedFiles); err != nil {
 		return fmt.Errorf("unable to update installed file for pkg %s: %w", pkg.Name, err)
 	}
 	return nil
