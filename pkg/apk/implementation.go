@@ -1004,6 +1004,10 @@ func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
 	if err = cfg.MapTo(pkg); err != nil {
 		return nil, fmt.Errorf("cfg.MapTo(): %w", err)
 	}
+	pkg.BuildTime = time.Unix(pkg.BuildDate, 0).UTC()
+	pkg.InstalledSize = pkg.Size
+	pkg.Size = uint64(exp.Size)
+	pkg.Checksum = exp.ControlHash
 
 	return pkg, nil
 }
