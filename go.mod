@@ -16,7 +16,7 @@ require (
 	golang.org/x/build v0.0.0-20220928220451-9294235e16f5
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
 	golang.org/x/sync v0.4.0
-	golang.org/x/sys v0.13.0
+	golang.org/x/sys v0.15.0
 	gopkg.in/ini.v1 v1.67.0
 )
 
