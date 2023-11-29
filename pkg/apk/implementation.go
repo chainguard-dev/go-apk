@@ -1039,7 +1039,7 @@ func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expand
 		}
 		defer packageData.Close()
 
-		installedFiles, err = a.installAPKFiles(ctx, packageData, pkg.Origin, pkg.Replaces)
+		installedFiles, err = a.installAPKFiles(ctx, packageData, pkg)
 		if err != nil {
 			return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 		}
