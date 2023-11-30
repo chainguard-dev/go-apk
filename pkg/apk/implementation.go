@@ -994,6 +994,7 @@ func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening .PKGINFO in %s: %w", exp.ControlFile, err)
 	}
+	defer f.Close()
 
 	cfg, err := ini.ShadowLoad(f)
 	if err != nil {
@@ -1045,10 +1046,11 @@ func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expand
 	}
 
 	// update the scripts.tar
-	controlData, err := os.Open(expanded.ControlFile)
+	controlData, err := expanded.ControlData()
 	if err != nil {
 		return fmt.Errorf("opening control file %q: %w", expanded.ControlFile, err)
 	}
+	defer controlData.Close()
 
 	if err := a.updateScriptsTar(pkg, controlData, sourceDateEpoch); err != nil {
 		return fmt.Errorf("unable to update scripts.tar for pkg %s: %w", pkg.Name, err)

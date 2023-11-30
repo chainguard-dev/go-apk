@@ -43,6 +43,7 @@ func (a *APK) writeOneFile(header *tar.Header, r io.Reader, allowOverwrite bool)
 			if err != nil {
 				return fmt.Errorf("unable to open existing file to calculate sum %s: %w", header.Name, err)
 			}
+			defer f.Close()
 			if _, err := io.Copy(w, f); err != nil {
 				return fmt.Errorf("unable to calculate sum of existing file %s: %w", header.Name, err)
 			}

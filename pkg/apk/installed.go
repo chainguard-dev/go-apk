@@ -128,6 +128,8 @@ func (a *APK) updateScriptsTar(pkg *Package, controlTarGz io.Reader, sourceDateE
 	if err != nil {
 		return fmt.Errorf("unable to open scripts file %s: %w", scriptsFilePath, err)
 	}
+	defer scripts.Close()
+
 	// only need to rewind if the file has tar in it
 	if fi.Size() >= 1024 {
 		if _, err = scripts.Seek(-1024, io.SeekEnd); err != nil {
@@ -135,7 +137,6 @@ func (a *APK) updateScriptsTar(pkg *Package, controlTarGz io.Reader, sourceDateE
 		}
 	}
 
-	defer scripts.Close()
 	tw := tar.NewWriter(scripts)
 	defer tw.Close()
 	for {
