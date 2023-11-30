@@ -40,6 +40,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 
@@ -64,6 +65,9 @@ type APK struct {
 	client            *http.Client
 	cache             *cache
 	ignoreSignatures  bool
+
+	// filename to owning package, last write wins
+	installedFiles map[string]*Package
 }
 
 func New(options ...Option) (*APK, error) {
@@ -81,6 +85,7 @@ func New(options ...Option) (*APK, error) {
 		ignoreMknodErrors: opt.ignoreMknodErrors,
 		version:           opt.version,
 		cache:             opt.cache,
+		installedFiles:    map[string]*Package{},
 	}, nil
 }
 
@@ -567,6 +572,10 @@ func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, a
 
 	expanded := make([]*expandapk.APKExpanded, len(allpkgs))
 
+	// Track what files were installed by which packages so we can deduplicate in idb.
+	allFiles := make([][]tar.Header, len(allpkgs))
+	infos := make([]*Package, len(allpkgs))
+
 	// A slice of pseudo-promises that get closed when expanded[i] is ready.
 	done := make([]chan struct{}, len(allpkgs))
 	for i := range allpkgs {
@@ -601,10 +610,14 @@ func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, a
 				if err != nil {
 					return fmt.Errorf("failed to read .PKGINFO for %s: %w", pkg, err)
 				}
+				infos[i] = pkgInfo
 
-				if err := a.installPackage(gctx, pkgInfo, exp, sourceDateEpoch); err != nil {
+				installedFiles, err := a.installPackage(gctx, pkgInfo, exp, sourceDateEpoch)
+				if err != nil {
 					return fmt.Errorf("installing %s: %w", pkg, err)
 				}
+
+				allFiles[i] = installedFiles
 			}
 		}
 
@@ -632,6 +645,35 @@ func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, a
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("installing packages: %w", err)
 	}
+
+	// update the installed file
+	for i, files := range allFiles {
+		pkg := infos[i]
+
+		// TODO: We currently skip over packages that are already installed.
+		// I'm ignoring this for now because that isn't really a thing that can happen,
+		// but if there are overlapping files from an already installed package, we should
+		// modify those in the idb file.
+		if pkg == nil {
+			continue
+		}
+
+		// Remove any files that were overwritten by another package.
+		files = slices.DeleteFunc(files, func(hdr tar.Header) bool {
+			owner, ok := a.installedFiles[hdr.Name]
+			if !ok {
+				// Keep directories, which actually should be duplicated in the idb.
+				return false
+			}
+
+			return owner != pkg
+		})
+
+		if err := a.addInstalledPackage(pkg, files); err != nil {
+			return fmt.Errorf("unable to update installed file for pkg %s: %w", pkg.Name, err)
+		}
+	}
+
 	return nil
 }
 
@@ -993,8 +1035,8 @@ func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.Read
 	}
 }
 
-type writeHeaderer interface {
-	WriteHeader(hdr tar.Header, tfs fs.FS, pkg *Package) error
+type WriteHeaderer interface {
+	WriteHeader(hdr tar.Header, tfs fs.FS, pkg *Package) (bool, error)
 }
 
 func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
@@ -1022,7 +1064,7 @@ func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
 }
 
 // installPackage installs a single package and updates installed db.
-func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) error {
+func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) ([]tar.Header, error) {
 	a.logger.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "installPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
@@ -1035,48 +1077,44 @@ func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expand
 		installedFiles []tar.Header
 	)
 
-	if wh, ok := a.fs.(writeHeaderer); ok {
+	if wh, ok := a.fs.(WriteHeaderer); ok {
 		installedFiles, err = a.lazilyInstallAPKFiles(ctx, wh, expanded.TarFS, pkg)
 		if err != nil {
-			return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
+			return nil, fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 		}
 	} else {
 		packageData, err := expanded.PackageData()
 		if err != nil {
-			return fmt.Errorf("opening package file %q: %w", expanded.PackageFile, err)
+			return nil, fmt.Errorf("opening package file %q: %w", expanded.PackageFile, err)
 		}
 		defer packageData.Close()
 
 		installedFiles, err = a.installAPKFiles(ctx, packageData, pkg)
 		if err != nil {
-			return fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
+			return nil, fmt.Errorf("unable to install files for pkg %s: %w", pkg.Name, err)
 		}
 	}
 
 	// update the scripts.tar
 	controlData, err := os.Open(expanded.ControlFile)
 	if err != nil {
-		return fmt.Errorf("opening control file %q: %w", expanded.ControlFile, err)
+		return nil, fmt.Errorf("opening control file %q: %w", expanded.ControlFile, err)
 	}
 	defer controlData.Close()
 
 	if err := a.updateScriptsTar(pkg, controlData, sourceDateEpoch); err != nil {
-		return fmt.Errorf("unable to update scripts.tar for pkg %s: %w", pkg.Name, err)
+		return nil, fmt.Errorf("unable to update scripts.tar for pkg %s: %w", pkg.Name, err)
 	}
 
 	// update the triggers
 	if _, err := controlData.Seek(0, 0); err != nil {
-		return fmt.Errorf("unable to seek to start of control data for pkg %s: %w", pkg.Name, err)
+		return nil, fmt.Errorf("unable to seek to start of control data for pkg %s: %w", pkg.Name, err)
 	}
 	if err := a.updateTriggers(pkg, controlData); err != nil {
-		return fmt.Errorf("unable to update triggers for pkg %s: %w", pkg.Name, err)
+		return nil, fmt.Errorf("unable to update triggers for pkg %s: %w", pkg.Name, err)
 	}
 
-	// update the installed file
-	if err := a.addInstalledPackage(pkg, installedFiles); err != nil {
-		return fmt.Errorf("unable to update installed file for pkg %s: %w", pkg.Name, err)
-	}
-	return nil
+	return installedFiles, nil
 }
 
 func (a *APK) datahash(controlTarGz io.Reader) (string, error) {

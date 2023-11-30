@@ -67,27 +67,11 @@ func (a *APK) writeOneFile(header *tar.Header, r io.Reader, allowOverwrite bool)
 	return nil
 }
 
-// buildInstalledFilePackageMapping builds a set that allows us to avoid checking over every file in every
-// package for every conflict, instead only checking packages that have that
-// file in them.
-func buildInstalledFilePackageMapping(installed []*InstalledPackage) map[string][]*InstalledPackage {
-	fileMapping := make(map[string][]*InstalledPackage)
-	for _, pkg := range installed {
-		// if it is not the same origin or isn't a replacement, we are not interested
-		// matched the origin (or is a replacement), so look for the file we are installing
-		for _, file := range pkg.Files {
-			fileMapping[file.Name] = append(fileMapping[file.Name], pkg)
-		}
-	}
-	return fileMapping
-}
-
 // installRegularFile handles the various error modes of writing a regular file
-func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader,
-	tmpDir string, pkg *Package, installedMap map[string][]*InstalledPackage) error {
+func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader, tmpDir string, pkg *Package) (bool, error) {
 	checksum, err := checksumFromHeader(header)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	replaceMap := map[string]struct{}{}
@@ -107,18 +91,18 @@ func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader,
 		// so we save it to a tempdir and then remove it
 		f, err := os.CreateTemp(tmpDir, "apk-file")
 		if err != nil {
-			return fmt.Errorf("error creating temporary file: %w", err)
+			return false, fmt.Errorf("error creating temporary file: %w", err)
 		}
 
 		if _, err := io.Copy(f, tee); err != nil {
-			return fmt.Errorf("error copying file %s: %w", header.Name, err)
+			return false, fmt.Errorf("error copying file %s: %w", header.Name, err)
 		}
 		offset, err := f.Seek(0, io.SeekStart)
 		if err != nil {
-			return fmt.Errorf("error seeking to start of temp file for %s: %w", header.Name, err)
+			return false, fmt.Errorf("error seeking to start of temp file for %s: %w", header.Name, err)
 		}
 		if offset != 0 {
-			return fmt.Errorf("error seeking to start of temp file for %s: offset is %d", header.Name, offset)
+			return false, fmt.Errorf("error seeking to start of temp file for %s: offset is %d", header.Name, offset)
 		}
 		checksum = w.Sum(nil)
 
@@ -126,61 +110,42 @@ func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader,
 	}
 
 	if err := a.writeOneFile(header, r, false); err != nil {
-		// if the error is something other than the file exists, return the error
+		// If the error is something other than the file exists, return the error.
 		var fileExistsError FileExistsError
 		if !errors.As(err, &fileExistsError) || pkg.Origin == "" {
-			return err
+			return false, err
 		}
-		// if the two files are identical, no need to overwrite, but we will keep the first one
-		// that wrote it, which might be the base system or an earlier package
+
+		// If the two files are identical, no need to overwrite, but we will keep the first one
+		// that wrote it, which might be the base system or an earlier package.
 		if bytes.Equal(checksum, fileExistsError.Sha1) {
-			return nil
+			return false, nil
 		}
 
-		// they are not identical,
-		// compare the origin of the package that we are installing now, to the origin of the package
-		// that provided the file. If the origins are the same, then we can allow the
-		// overwrite. Otherwise, we need to return an error.
+		// If the files are not identical, then we can overwrite the file in two situations:
+		// 1. One of the packages replaces the other.
+		// 2. The packages are in the same origin.
 
-		// Build the installedMap for the first time if necessary
-		if len(installedMap) == 0 {
-			installed, err := a.GetInstalled()
-			if err != nil {
-				return fmt.Errorf("unable to get list of installed packages and files: %w", err)
-			}
-			installedMap = buildInstalledFilePackageMapping(installed)
+		// If the existing file's package replaces the package we want to install, we don't need to write this file.
+		pk, ok := a.installedFiles[header.Name]
+		if !ok {
+			return false, fmt.Errorf("found existing file we did not install (this should never happen): %s", header.Name)
 		}
-		var found bool
-		packages, ok := installedMap[header.Name]
-		if ok {
-			// If the existing file's package replaces the package we want to install, we don't need to write this file.
-			for _, pk := range packages {
-				for _, rep := range pk.Replaces {
-					if pkg.Name == rep {
-						return nil
-					}
-				}
-			}
 
-			// Otherwise, determine if the package we are installing replaces the existing package.
-			for _, pk := range packages {
-				_, isReplaced := replaceMap[pk.Name]
-				if pk.Origin != pkg.Origin && !isReplaced {
-					continue
-				}
-
-				found = true
-				break
+		for _, rep := range pk.Replaces {
+			if pkg.Name == rep {
+				return false, nil
 			}
 		}
-		if !found {
-			return fmt.Errorf("unable to install file over existing one, different contents: %s", header.Name)
-		}
-		// it was found in a package with the same origin, so just overwrite
 
-		// if we get here, it had the same origin so even if different, we are allowed to overwrite the file
+		// Otherwise, we can only overwrite the file if it's in the same origin or if it replaces the existing package.
+		_, isReplaced := replaceMap[pk.Name]
+		if pk.Origin != pkg.Origin && !isReplaced {
+			return false, fmt.Errorf("unable to install file over existing one, different contents: %s", header.Name)
+		}
+
 		if err := a.writeOneFile(header, r, true); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -200,10 +165,10 @@ func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader,
 		}
 		attrName := strings.TrimPrefix(k, xattrTarPAXRecordsPrefix)
 		if err := a.fs.SetXattr(header.Name, attrName, []byte(v)); err != nil {
-			return fmt.Errorf("error setting xattr %s on %s: %w", attrName, header.Name, err)
+			return false, fmt.Errorf("error setting xattr %s on %s: %w", attrName, header.Name, err)
 		}
 	}
-	return err
+	return true, nil
 }
 
 // installAPKFiles install the files from the APK and return the list of installed files
@@ -217,14 +182,6 @@ func (a *APK) installAPKFiles(ctx context.Context, in io.Reader, pkg *Package) (
 	tmpDir, err := os.MkdirTemp("", "apk-install")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporary directory: %w", err)
-	}
-	installed, err := a.GetInstalled()
-	if err != nil {
-		return nil, fmt.Errorf("unable to get list of installed packages and files: %w", err)
-	}
-	installedMap := buildInstalledFilePackageMapping(installed)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create temporary directory for unpacking an apk: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -278,9 +235,13 @@ func (a *APK) installAPKFiles(ctx context.Context, in io.Reader, pkg *Package) (
 			}
 
 		case tar.TypeReg:
-			err = a.installRegularFile(header, tr, tmpDir, pkg, installedMap)
+			installed, err := a.installRegularFile(header, tr, tmpDir, pkg)
 			if err != nil {
 				return nil, err
+			}
+
+			if installed {
+				a.installedFiles[header.Name] = pkg
 			}
 
 		case tar.TypeSymlink:
@@ -343,7 +304,7 @@ func checksumFromHeader(header *tar.Header) ([]byte, error) {
 // to provide much cheaper access to the file data when we read it later.
 //
 // This is an optimizing fastpath for when a.fs is a specific implementation that supports it.
-func (a *APK) lazilyInstallAPKFiles(ctx context.Context, wh writeHeaderer, tf *tarfs.FS, pkg *Package) ([]tar.Header, error) {
+func (a *APK) lazilyInstallAPKFiles(ctx context.Context, wh WriteHeaderer, tf *tarfs.FS, pkg *Package) ([]tar.Header, error) {
 	_, span := otel.Tracer("go-apk").Start(ctx, "lazilyInstallAPKFiles")
 	defer span.End()
 
@@ -362,8 +323,13 @@ func (a *APK) lazilyInstallAPKFiles(ctx context.Context, wh writeHeaderer, tf *t
 		// whatever it is now, it is in the data section
 		startedDataSection = true
 
-		if err := wh.WriteHeader(file.Header, tf, pkg); err != nil {
+		installed, err := wh.WriteHeader(file.Header, tf, pkg)
+		if err != nil {
 			return nil, err
+		}
+
+		if installed && file.Header.Typeflag == tar.TypeReg {
+			a.installedFiles[file.Header.Name] = pkg
 		}
 
 		files = append(files, file.Header)
