@@ -75,7 +75,7 @@ func (e *etagCache) get(t *cacheTransport, request *http.Request, cacheFile stri
 		// We simulate content-based addressing with the etag values using an .etag
 		// file extension.
 		etagFile := cacheFileFromEtag(cacheFile, initialEtag)
-		if _, err := os.Open(etagFile); err == nil {
+		if _, err := os.Stat(etagFile); err == nil {
 			e.resps.Store(url, etagResp{
 				cacheFile: etagFile,
 			})

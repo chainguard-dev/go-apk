@@ -139,6 +139,8 @@ func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) (
 	if err != nil {
 		return nil, fmt.Errorf("could not open arch file in %s at %s: %w", a.fs, archFile, err)
 	}
+	defer archFile.Close()
+
 	archB, err := io.ReadAll(archFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read arch file: %w", err)
