@@ -282,6 +282,8 @@ func parseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint
 			pkg.Dependencies = strings.Split(val, " ")
 		case "p":
 			pkg.Provides = strings.Split(val, " ")
+		case "r":
+			pkg.Replaces = strings.Split(val, " ")
 		case "c":
 			pkg.RepoCommit = val
 		case "t":

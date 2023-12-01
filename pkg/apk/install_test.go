@@ -55,7 +55,7 @@ func TestInstallAPKFiles(t *testing.T) {
 		}
 
 		r := testCreateTarForPackage(entries)
-		headers, err := apk.installAPKFiles(context.Background(), r, "", nil)
+		headers, err := apk.installAPKFiles(context.Background(), r, &Package{Origin: ""})
 		require.NoError(t, err)
 
 		require.Equal(t, len(headers), len(entries))
@@ -112,7 +112,7 @@ func TestInstallAPKFiles(t *testing.T) {
 		}
 
 		r := testCreateTarForPackage(entries)
-		headers, err := apk.installAPKFiles(context.Background(), r, "", nil)
+		headers, err := apk.installAPKFiles(context.Background(), r, &Package{})
 		require.NoError(t, err)
 
 		require.Equal(t, len(headers), len(entries))
@@ -162,7 +162,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, nil)
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
 			require.NoError(t, err)
 			err = apk.addInstalledPackage(pkg, headers)
 			require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, "second", nil)
+			_, err = apk.installAPKFiles(context.Background(), r, &Package{Origin: "second"})
 			require.Error(t, err, "some double-write error")
 
 			actual, err = src.ReadFile(overwriteFilename)
@@ -199,7 +199,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, nil)
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
 			require.NoError(t, err)
 			err = apk.addInstalledPackage(pkg, headers)
 			require.NoError(t, err)
@@ -213,7 +213,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, "second", []string{"first"})
+			_, err = apk.installAPKFiles(context.Background(), r, &Package{Origin: "second", Replaces: []string{"first"}})
 			require.NoError(t, err)
 
 			actual, err = src.ReadFile(overwriteFilename)
@@ -235,7 +235,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			pkg := &Package{Name: "first", Origin: "first"}
 
 			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, nil)
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
 			require.NoError(t, err)
 			err = apk.addInstalledPackage(pkg, headers)
 			require.NoError(t, err)
@@ -249,7 +249,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, pkg.Origin, nil)
+			_, err = apk.installAPKFiles(context.Background(), r, pkg)
 			require.NoError(t, err)
 
 			actual, err = src.ReadFile(overwriteFilename)
@@ -271,7 +271,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg.Origin, nil)
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
 			require.NoError(t, err)
 			err = apk.addInstalledPackage(pkg, headers)
 			require.NoError(t, err)
@@ -285,7 +285,45 @@ func TestInstallAPKFiles(t *testing.T) {
 			}
 
 			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, "second", nil)
+			_, err = apk.installAPKFiles(context.Background(), r, &Package{Origin: "second"})
+			require.NoError(t, err)
+
+			actual, err = src.ReadFile(overwriteFilename)
+			require.NoError(t, err, "error reading %s", overwriteFilename)
+			require.Equal(t, originalContent, actual)
+		})
+		t.Run("different origin and content, but is replaced", func(t *testing.T) {
+			apk, src, err := testGetTestAPK()
+			require.NoErrorf(t, err, "failed to get test APK")
+			// install a file in a known location
+			originalContent := []byte("hello world")
+			finalContent := []byte("extra long I am here")
+			overwriteFilename := "etc/doublewrite"
+
+			pkg := &Package{Name: "first", Origin: "first", Replaces: []string{"second"}}
+
+			entries := []testDirEntry{
+				{"etc", 0755, true, nil, nil},
+				{overwriteFilename, 0755, false, originalContent, nil},
+			}
+
+			r := testCreateTarForPackage(entries)
+			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
+			require.NoError(t, err)
+			err = apk.addInstalledPackage(pkg, headers)
+			require.NoError(t, err)
+
+			actual, err := src.ReadFile(overwriteFilename)
+			require.NoError(t, err, "error reading %s", overwriteFilename)
+			require.Equal(t, originalContent, actual)
+
+			pkg2 := &Package{Name: "second", Origin: "second"}
+			entries = []testDirEntry{
+				{overwriteFilename, 0755, false, finalContent, nil},
+			}
+
+			r = testCreateTarForPackage(entries)
+			_, err = apk.installAPKFiles(context.Background(), r, pkg2)
 			require.NoError(t, err)
 
 			actual, err = src.ReadFile(overwriteFilename)
