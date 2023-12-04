@@ -1046,7 +1046,7 @@ func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expand
 	}
 
 	// update the scripts.tar
-	controlData, err := expanded.ControlData()
+	controlData, err := os.Open(expanded.ControlFile)
 	if err != nil {
 		return fmt.Errorf("opening control file %q: %w", expanded.ControlFile, err)
 	}
