@@ -72,7 +72,7 @@ type Package struct {
 	InstallIf        []string
 	Size             uint64 `ini:"size"`
 	InstalledSize    uint64
-	ProviderPriority uint64
+	ProviderPriority uint64 `ini:"provider_priority"`
 	BuildTime        time.Time
 	BuildDate        int64    `ini:"builddate"`
 	RepoCommit       string   `ini:"commit"`
