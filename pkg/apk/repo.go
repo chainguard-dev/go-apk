@@ -23,7 +23,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hashicorp/go-retryablehttp"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/otel"
 )
 
@@ -185,7 +185,6 @@ func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) (
 // PkgResolver with only those indexes.
 // If the indexes change, you should generate a new pkgResolver.
 type PkgResolver struct {
-	indexes      []NamedIndex
 	nameMap      map[string][]*repositoryPackage
 	providesMap  map[string][]*repositoryPackage
 	installIfMap map[string][]*repositoryPackage // contains any package that should be installed if the named package is installed
@@ -196,22 +195,22 @@ type PkgResolver struct {
 
 // NewPkgResolver creates a new pkgResolver from a list of indexes.
 // The indexes are anything that implements NamedIndex.
-func NewPkgResolver(ctx context.Context, indexes []NamedIndex) *PkgResolver {
+func NewPkgResolver(ctx context.Context, indexes []NamedIndex, packageFilter PackageFilter) *PkgResolver {
 	_, span := otel.Tracer("go-apk").Start(ctx, "NewPkgResolver")
 	defer span.End()
 
-	numPackages := 0
+	// upper bound for the all packages.
+	maxNumPackages := 0
 	for _, index := range indexes {
-		numPackages += index.Count()
+		maxNumPackages += index.Count()
 	}
 
 	var (
-		pkgNameMap     = make(map[string][]*repositoryPackage, numPackages)
-		pkgProvidesMap = make(map[string][]*repositoryPackage, numPackages)
+		pkgNameMap     = make(map[string][]*repositoryPackage, maxNumPackages)
+		pkgProvidesMap = make(map[string][]*repositoryPackage, maxNumPackages)
 		installIfMap   = map[string][]*repositoryPackage{}
 	)
 	p := &PkgResolver{
-		indexes:        indexes,
 		parsedVersions: map[string]packageVersion{},
 		depForVersion:  map[string]pinStuff{},
 	}
@@ -219,6 +218,9 @@ func NewPkgResolver(ctx context.Context, indexes []NamedIndex) *PkgResolver {
 	// create a map of every package by name and version to its RepositoryPackage
 	for _, index := range indexes {
 		for _, pkg := range index.Packages() {
+			if !packageFilter(*pkg.Package) {
+				continue
+			}
 			pkgNameMap[pkg.Name] = append(pkgNameMap[pkg.Name], &repositoryPackage{
 				RepositoryPackage: pkg,
 				pinnedName:        index.Name(),

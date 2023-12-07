@@ -886,7 +886,7 @@ func TestResolveVersion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
-			pr := NewPkgResolver(context.Background(), []NamedIndex{})
+			pr := NewPkgResolver(context.Background(), []NamedIndex{}, AcceptAllPackageFilter())
 			found := pr.filterPackages(pkgs, withVersion(tt.version, tt.compare), withPreferPin(tt.pin), withInstalledPackage(tt.installed))
 			// add the existing in, if any
 			existing := make(map[string]*RepositoryPackage)

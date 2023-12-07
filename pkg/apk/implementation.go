@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gopkg.in/ini.v1"
 	"io"
 	"io/fs"
 	"net/http"
@@ -34,8 +35,6 @@ import (
 	"time"
 
 	"github.com/chainguard-dev/go-apk/pkg/expandapk"
-	"gopkg.in/ini.v1"
-
 	"go.lsp.dev/uri"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -46,7 +45,7 @@ import (
 	"github.com/chainguard-dev/go-apk/internal/tarfs"
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 	logger "github.com/chainguard-dev/go-apk/pkg/logger"
-	"github.com/hashicorp/go-retryablehttp"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 // This is terrible but simpler than plumbing around a cache for now.
@@ -64,6 +63,7 @@ type APK struct {
 	client            *http.Client
 	cache             *cache
 	ignoreSignatures  bool
+	packageFilter     PackageFilter
 }
 
 func New(options ...Option) (*APK, error) {
@@ -81,6 +81,7 @@ func New(options ...Option) (*APK, error) {
 		ignoreMknodErrors: opt.ignoreMknodErrors,
 		version:           opt.version,
 		cache:             opt.cache,
+		packageFilter:     opt.packageFilter,
 	}, nil
 }
 
@@ -448,7 +449,7 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage,
 	if err != nil {
 		return toInstall, conflicts, fmt.Errorf("error getting world packages: %w", err)
 	}
-	resolver := NewPkgResolver(ctx, indexes)
+	resolver := NewPkgResolver(ctx, indexes, a.packageFilter)
 	toInstall, conflicts, err = resolver.GetPackagesWithDependencies(ctx, directPkgs)
 	if err != nil {
 		return
