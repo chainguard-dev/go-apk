@@ -379,6 +379,30 @@ func testGetPackagesAndIndex() ([]*RepositoryPackage, []*RepositoryWithIndex) {
 	return repoPackages, []*RepositoryWithIndex{repoWithIndex}
 }
 
+func TestPackageFilter(t *testing.T) {
+	_, index := testGetPackagesAndIndex()
+
+	expectedPackage5 := []string([]string{"package5@1.5.1", "package5@1.5.0", "package5-special@1.2.0"})
+	expectedPackage6 := []string([]string{"package6@2.0.0"})
+
+	packageFilter := func(p Package) bool {
+		if p.Name == "package5" && p.Version != "1.5.0" && p.Version != "1.5.1" {
+			return false
+		}
+		if p.Name == "package6" && p.Version != "2.0.0" {
+			return false
+		}
+		return true
+	}
+	resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), packageFilter)
+	package5resolved, err := resolver.ResolvePackage("package5")
+	require.NoErrorf(t, err, "ResolvePackage failed")
+	require.Equal(t, expectedPackage5, repositoryPackages2namesAndVersions(package5resolved))
+	package6resolved, err := resolver.ResolvePackage("package6")
+	require.NoErrorf(t, err, "ResolvePackage failed")
+	require.Equal(t, expectedPackage6, repositoryPackages2namesAndVersions(package6resolved))
+}
+
 func TestGetPackagesWithDependences(t *testing.T) {
 	t.Run("names only", func(t *testing.T) {
 		_, index := testGetPackagesAndIndex()
@@ -393,13 +417,10 @@ func TestGetPackagesWithDependences(t *testing.T) {
 		// - find all of the dependencies of all of the packages
 		// - eliminate duplicates
 		// - reverse the order, so that it is in order of installation
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		pkgs, _, err := resolver.GetPackagesWithDependencies(context.Background(), names)
 		require.NoErrorf(t, err, "unable to get packages")
-		actual := make([]string, 0, len(pkgs))
-		for _, pkg := range pkgs {
-			actual = append(actual, pkg.Name)
-		}
+		actual := repositoryPackages2names(pkgs)
 		require.True(t, reflect.DeepEqual(expected, actual), "packages mismatch:\nactual %v\nexpect %v", actual, expected)
 	})
 	t.Run("dependency in world", func(t *testing.T) {
@@ -410,7 +431,7 @@ func TestGetPackagesWithDependences(t *testing.T) {
 		// we use abc9 -> package5 rather than package9 -> package5, because world sorts alphabetically,
 		// and we want to ensure that, even though abc9 is processed first, package5 override still works.
 		_, index := testGetPackagesAndIndex()
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		t.Run("same name no lock", func(t *testing.T) {
 			name, version := "package5", "2.0.0" //nolint:goconst // no, we do not want to make it a constant
 			names := []string{name, "abc9"}
@@ -456,13 +477,29 @@ func TestGetPackagesWithDependences(t *testing.T) {
 	})
 }
 
+func repositoryPackages2names(pkgs []*RepositoryPackage) []string {
+	actual := make([]string, 0, len(pkgs))
+	for _, pkg := range pkgs {
+		actual = append(actual, pkg.Name)
+	}
+	return actual
+}
+
+func repositoryPackages2namesAndVersions(pkgs []*RepositoryPackage) []string {
+	actual := make([]string, 0, len(pkgs))
+	for _, pkg := range pkgs {
+		actual = append(actual, pkg.Name+"@"+pkg.Version)
+	}
+	return actual
+}
+
 func TestGetPackageDependencies(t *testing.T) {
 	t.Run("normal dependencies", func(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
 		expected := []string{"dep4", "dep5", "dep1", "dep6", "foo", "libq", "dep3", "busybox", "dep2"}
 		_, index := testGetPackagesAndIndex()
 
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		_, pkgs, _, err := resolver.GetPackageWithDependencies("package1", nil)
 		require.NoErrorf(t, err, "unable to get dependencies")
 
@@ -477,7 +514,7 @@ func TestGetPackageDependencies(t *testing.T) {
 		expected := []string{"dep8"}
 		_, index := testGetPackagesAndIndex()
 
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		_, pkgs, _, err := resolver.GetPackageWithDependencies("package3", nil)
 		require.NoErrorf(t, err, "unable to get dependencies")
 
@@ -490,7 +527,7 @@ func TestGetPackageDependencies(t *testing.T) {
 	t.Run("self-fulfill", func(t *testing.T) {
 		_, index := testGetPackagesAndIndex()
 
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		pkg6, err := resolver.ResolvePackage("package6")
 		require.NoErrorf(t, err, "unable to resolve package6")
 		require.GreaterOrEqual(t, len(pkg6), 1, "package6 should have at least one match")
@@ -517,7 +554,7 @@ func TestGetPackageDependencies(t *testing.T) {
 	})
 	t.Run("existing dependency", func(t *testing.T) {
 		origPkgs, index := testGetPackagesAndIndex()
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 
 		// start with regular resolution, just to compare
 		expectedName := "package5"
@@ -551,7 +588,7 @@ func TestResolvePackage(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
 		_, index := testGetPackagesAndIndex()
 
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		pkgs, err := resolver.ResolvePackage("package12")
 		require.Error(t, err)
 		require.Len(t, pkgs, 0)
@@ -560,7 +597,7 @@ func TestResolvePackage(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
 		_, index := testGetPackagesAndIndex()
 
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		pkgs, err := resolver.ResolvePackage("package5")
 		require.NoError(t, err)
 		require.Len(t, pkgs, 5)
@@ -569,7 +606,7 @@ func TestResolvePackage(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
 		_, index := testGetPackagesAndIndex()
 
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		version := "1.0.0"
 		pkgs, err := resolver.ResolvePackage("package5=" + version)
 		require.NoError(t, err)
@@ -586,7 +623,7 @@ func TestResolvePackage(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
 		_, index := testGetPackagesAndIndex()
 
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		pkgs, err := resolver.ResolvePackage("package5>1.0.0")
 		require.NoError(t, err)
 		require.Len(t, pkgs, 4)
@@ -597,7 +634,7 @@ func TestResolvePackage(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
 		_, index := testGetPackagesAndIndex()
 
-		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index), AcceptAllPackageFilter())
 		pkgs, err := resolver.ResolvePackage("package7")
 		require.NoError(t, err)
 		require.Len(t, pkgs, 2)
@@ -619,7 +656,7 @@ func TestVersionHierarchy(t *testing.T) {
 			{Name: "multi-versioner", Version: "2.0.6-r0"},
 		},
 	})
-	resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes([]*RepositoryWithIndex{index}))
+	resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes([]*RepositoryWithIndex{index}), AcceptAllPackageFilter())
 	pkgWithVersions, ok := resolver.nameMap["multi-versioner"]
 	require.True(t, ok, "found multi-versioner in nameMap")
 	for i, pkg := range pkgWithVersions {
@@ -704,7 +741,7 @@ func TestSortPackages(t *testing.T) {
 				existing[pkg.pkg.Name] = NewRepositoryPackage(pkg.pkg, &RepositoryWithIndex{Repository: &Repository{URI: pkg.repo}})
 			}
 			namedPkgs := testNamedPackageFromPackages(pkgs)
-			pr := NewPkgResolver(context.Background(), []NamedIndex{})
+			pr := NewPkgResolver(context.Background(), []NamedIndex{}, AcceptAllPackageFilter())
 			pr.sortPackages(namedPkgs, pkg, "", existing, "")
 			for i, pkg := range namedPkgs {
 				require.Equal(t, int(pkg.InstalledSize), i, "position matches")

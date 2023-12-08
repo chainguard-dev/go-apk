@@ -33,6 +33,7 @@ type opts struct {
 	fs                apkfs.FullFS
 	version           string
 	cache             *cache
+	packageFilter     PackageFilter
 }
 
 type Option func(*opts) error
@@ -86,6 +87,16 @@ func WithFS(fs apkfs.FullFS) Option {
 	}
 }
 
+// WithPackageFilter allows to limit set of packages participating in the resolution process to the ones passing
+// the condition.
+// This in particular allows constraining evaluation to the precomputed "locked" set of versions of packages.
+func WithPackageFilter(packageFilter PackageFilter) Option {
+	return func(o *opts) error {
+		o.packageFilter = packageFilter
+		return nil
+	}
+}
+
 // WithCache sets to use a cache directory for downloaded apk files and APKINDEX files.
 // If not provided, will not cache.
 //
@@ -119,5 +130,6 @@ func defaultOpts() *opts {
 		arch:              ArchToAPK(runtime.GOARCH),
 		ignoreMknodErrors: false,
 		fs:                fs,
+		packageFilter:     AcceptAllPackageFilter(),
 	}
 }
