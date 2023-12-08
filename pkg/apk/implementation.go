@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hashicorp/go-retryablehttp"
 	"gopkg.in/ini.v1"
 	"io"
 	"io/fs"
@@ -45,7 +46,6 @@ import (
 	"github.com/chainguard-dev/go-apk/internal/tarfs"
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
 	logger "github.com/chainguard-dev/go-apk/pkg/logger"
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 // This is terrible but simpler than plumbing around a cache for now.
