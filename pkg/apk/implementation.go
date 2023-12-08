@@ -45,8 +45,8 @@ import (
 
 	"github.com/chainguard-dev/go-apk/internal/tarfs"
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
-	logger "github.com/chainguard-dev/go-apk/pkg/logger"
-	"github.com/hashicorp/go-retryablehttp"
+	"github.com/chainguard-dev/go-apk/pkg/logger"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 // This is terrible but simpler than plumbing around a cache for now.
@@ -549,6 +549,7 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 			return fmt.Errorf("cannot install due to conflict with %s", pkg)
 		}
 	}
+	// Cast []*RepositoryPackage into []InstallablePackage.
 	allInstPkgs := make([]InstallablePackage, len(allpkgs))
 	for i, pkg := range allpkgs {
 		allInstPkgs[i] = pkg
@@ -557,18 +558,18 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 	return a.InstallPackages(ctx, sourceDateEpoch, allInstPkgs)
 }
 
-func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, pkgs []InstallablePackage) error {
+func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, allpkgs []InstallablePackage) error {
 	// TODO: Consider making this configurable option.
 	jobs := runtime.GOMAXPROCS(0)
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(jobs + 1)
 
-	expanded := make([]*expandapk.APKExpanded, len(pkgs))
+	expanded := make([]*expandapk.APKExpanded, len(allpkgs))
 
 	// A slice of pseudo-promises that get closed when expanded[i] is ready.
-	done := make([]chan struct{}, len(pkgs))
-	for i := range pkgs {
+	done := make([]chan struct{}, len(allpkgs))
+	for i := range allpkgs {
 		done[i] = make(chan struct{})
 	}
 
@@ -584,7 +585,7 @@ func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, p
 				return gctx.Err()
 			case <-ch:
 				exp := expanded[i]
-				pkg := pkgs[i]
+				pkg := allpkgs[i]
 
 				isInstalled, err := a.isInstalledPackage(pkg.PackageName())
 				if err != nil {
@@ -612,7 +613,7 @@ func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, p
 
 	// Meanwhile, concurrently fetch and expand all our APKs.
 	// We signal they are ready to be installed by closing done[i].
-	for i, pkg := range pkgs {
+	for i, pkg := range allpkgs {
 		i, pkg := i, pkg
 
 		g.Go(func() error {

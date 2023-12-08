@@ -60,7 +60,6 @@ type InstallablePackage interface {
 	URL() string
 	PackageName() string
 	ChecksumString() string
-	PackageVersion() string
 }
 
 // Package represents a single package with the information present in an
@@ -87,9 +86,8 @@ type Package struct {
 	Replaces         []string `ini:"replaces,,allowshadow"`
 }
 
-func (p *Package) String() string         { return fmt.Sprintf("%s ver:%s arch:%s", p.Name, p.Version, p.Arch) }
-func (p *Package) PackageName() string    { return p.Name }
-func (p *Package) PackageVersion() string { return p.Version }
+func (p *Package) String() string      { return fmt.Sprintf("%s ver:%s arch:%s", p.Name, p.Version, p.Arch) }
+func (p *Package) PackageName() string { return p.Name }
 
 // Filename returns the package filename as it's named in a repository.
 func (p *Package) Filename() string {
