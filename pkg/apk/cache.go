@@ -236,7 +236,7 @@ func cacheDirFromFile(cacheFile string) string {
 
 func cacheFileFromEtag(cacheFile, etag string) string {
 	cacheDir := filepath.Dir(cacheFile)
-	ext := ".etag"
+	ext := ".etag" //nolint:goconst
 
 	// Keep all the index files under APKINDEX/ with appropriate file extension.
 	if strings.HasSuffix(cacheFile, "APKINDEX.tar.gz") {
