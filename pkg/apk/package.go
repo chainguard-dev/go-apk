@@ -86,7 +86,9 @@ type Package struct {
 	Replaces         []string `ini:"replaces,,allowshadow"`
 }
 
-func (p *Package) String() string      { return fmt.Sprintf("%s ver:%s arch:%s", p.Name, p.Version, p.Arch) }
+func (p *Package) String() string {
+	return fmt.Sprintf("%s (ver:%s arch:%s)", p.Name, p.Version, p.Arch)
+}
 func (p *Package) PackageName() string { return p.Name }
 
 // Filename returns the package filename as it's named in a repository.
