@@ -22,7 +22,7 @@ import (
 	"strings"
 )
 
-// getWorldPackages get list of packages that should be installed, according to /etc/apk/world
+// GetWorld -  get list of packages that should be installed, according to /etc/apk/world
 func (a *APK) GetWorld() ([]string, error) {
 	worldFile, err := a.fs.Open(worldFilePath)
 	if err != nil {

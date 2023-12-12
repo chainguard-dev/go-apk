@@ -45,8 +45,8 @@ import (
 
 	"github.com/chainguard-dev/go-apk/internal/tarfs"
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
-	logger "github.com/chainguard-dev/go-apk/pkg/logger"
-	"github.com/hashicorp/go-retryablehttp"
+	"github.com/chainguard-dev/go-apk/pkg/logger"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 // This is terrible but simpler than plumbing around a cache for now.
@@ -427,7 +427,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 	return eg.Wait()
 }
 
-// ResolveWorld determine the target state for the requested dependencies in /etc/apk/world. Do not install anything.
+// ResolveWorld determine the target state for the requested dependencies in /etc/apk/world. Does not install anything.
 func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage, conflicts []string, err error) {
 	a.logger.Infof("determining desired apk world")
 
@@ -458,7 +458,7 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage,
 }
 
 func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
-	a.logger.Infof("synchronizing with desired apk world")
+	a.logger.Infof("resolving and calculating 'world' (packages to install) ")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
 	defer span.End()
@@ -549,7 +549,16 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 			return fmt.Errorf("cannot install due to conflict with %s", pkg)
 		}
 	}
+	// Cast []*RepositoryPackage into []InstallablePackage.
+	allInstPkgs := make([]InstallablePackage, len(allpkgs))
+	for i, pkg := range allpkgs {
+		allInstPkgs[i] = pkg
+	}
 
+	return a.InstallPackages(ctx, sourceDateEpoch, allInstPkgs)
+}
+
+func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, allpkgs []InstallablePackage) error {
 	// TODO: Consider making this configurable option.
 	jobs := runtime.GOMAXPROCS(0)
 
@@ -578,9 +587,9 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 				exp := expanded[i]
 				pkg := allpkgs[i]
 
-				isInstalled, err := a.isInstalledPackage(pkg.Name)
+				isInstalled, err := a.isInstalledPackage(pkg.PackageName())
 				if err != nil {
-					return fmt.Errorf("error checking if package %s is installed: %w", pkg.Name, err)
+					return fmt.Errorf("error checking if package %s is installed: %w", pkg, err)
 				}
 
 				if isInstalled {
@@ -590,11 +599,11 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 				// The data in .PKGINFO is more complete than what is in APKINDEX.
 				pkgInfo, err := packageInfo(exp)
 				if err != nil {
-					return fmt.Errorf("failed to read .PKGINFO for %s: %w", pkg.Name, err)
+					return fmt.Errorf("failed to read .PKGINFO for %s: %w", pkg, err)
 				}
 
 				if err := a.installPackage(gctx, pkgInfo, exp, sourceDateEpoch); err != nil {
-					return fmt.Errorf("installing %s: %w", pkg.Name, err)
+					return fmt.Errorf("installing %s: %w", pkg, err)
 				}
 			}
 		}
@@ -610,7 +619,7 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 		g.Go(func() error {
 			exp, err := a.expandPackage(gctx, pkg)
 			if err != nil {
-				return fmt.Errorf("expanding %s: %w", pkg.Name, err)
+				return fmt.Errorf("expanding %s: %w", pkg, err)
 			}
 
 			expanded[i] = exp
@@ -623,7 +632,6 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("installing packages: %w", err)
 	}
-
 	return nil
 }
 
@@ -707,8 +715,8 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 	return nil
 }
 
-func (a *APK) cachePackage(ctx context.Context, pkg *RepositoryPackage, exp *expandapk.APKExpanded, cacheDir string) (*expandapk.APKExpanded, error) {
-	_, span := otel.Tracer("go-apk").Start(ctx, "cachePackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
+func (a *APK) cachePackage(ctx context.Context, pkg InstallablePackage, exp *expandapk.APKExpanded, cacheDir string) (*expandapk.APKExpanded, error) {
+	_, span := otel.Tracer("go-apk").Start(ctx, "cachePackage", trace.WithAttributes(attribute.String("package", pkg.PackageName())))
 	defer span.End()
 
 	// Rename exp's temp files to content-addressable identifiers in the cache.
@@ -750,8 +758,8 @@ func (a *APK) cachePackage(ctx context.Context, pkg *RepositoryPackage, exp *exp
 	return exp, nil
 }
 
-func (a *APK) cachedPackage(ctx context.Context, pkg *RepositoryPackage, cacheDir string) (*expandapk.APKExpanded, error) {
-	_, span := otel.Tracer("go-apk").Start(ctx, "cachedPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
+func (a *APK) cachedPackage(ctx context.Context, pkg InstallablePackage, cacheDir string) (*expandapk.APKExpanded, error) {
+	_, span := otel.Tracer("go-apk").Start(ctx, "cachedPackage", trace.WithAttributes(attribute.String("package", pkg.PackageName())))
 	defer span.End()
 
 	chk := pkg.ChecksumString()
@@ -799,7 +807,7 @@ func (a *APK) cachedPackage(ctx context.Context, pkg *RepositoryPackage, cacheDi
 
 	datahash, err := a.datahash(f)
 	if err != nil {
-		return nil, fmt.Errorf("datahash for %s: %w", pkg.Name, err)
+		return nil, fmt.Errorf("datahash for %s: %w", pkg, err)
 	}
 
 	dat := filepath.Join(cacheDir, datahash+".dat.tar.gz")
@@ -837,7 +845,7 @@ type apkCache struct {
 	resps sync.Map
 }
 
-func (c *apkCache) get(ctx context.Context, a *APK, pkg *RepositoryPackage) (*expandapk.APKExpanded, error) {
+func (c *apkCache) get(ctx context.Context, a *APK, pkg InstallablePackage) (*expandapk.APKExpanded, error) {
 	u := pkg.URL()
 	// Do all the expensive things inside the once.
 	once, _ := c.onces.LoadOrStore(u, &sync.Once{})
@@ -858,7 +866,7 @@ func (c *apkCache) get(ctx context.Context, a *APK, pkg *RepositoryPackage) (*ex
 	return result.exp, result.err
 }
 
-func (a *APK) expandPackage(ctx context.Context, pkg *RepositoryPackage) (*expandapk.APKExpanded, error) {
+func (a *APK) expandPackage(ctx context.Context, pkg InstallablePackage) (*expandapk.APKExpanded, error) {
 	if a.cache == nil {
 		// If we don't have a cache configured, don't use the global cache.
 		// Calling APKExpanded.Close() will clean up a tempdir.
@@ -870,8 +878,8 @@ func (a *APK) expandPackage(ctx context.Context, pkg *RepositoryPackage) (*expan
 	return globalApkCache.get(ctx, a, pkg)
 }
 
-func expandPackage(ctx context.Context, a *APK, pkg *RepositoryPackage) (*expandapk.APKExpanded, error) {
-	ctx, span := otel.Tracer("go-apk").Start(ctx, "expandPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
+func expandPackage(ctx context.Context, a *APK, pkg InstallablePackage) (*expandapk.APKExpanded, error) {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "expandPackage", trace.WithAttributes(attribute.String("package", pkg.PackageName())))
 	defer span.End()
 
 	cacheDir := ""
@@ -884,11 +892,11 @@ func expandPackage(ctx context.Context, a *APK, pkg *RepositoryPackage) (*expand
 
 		exp, err := a.cachedPackage(ctx, pkg, cacheDir)
 		if err == nil {
-			a.logger.Debugf("cache hit (%s)", pkg.Name)
+			a.logger.Debugf("cache hit (%s)", pkg.PackageName())
 			return exp, nil
 		}
 
-		a.logger.Debugf("cache miss (%s): %v", pkg.Name, err)
+		a.logger.Debugf("cache miss (%s): %v", pkg.PackageName(), err)
 
 		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 			return nil, fmt.Errorf("unable to create cache directory %q: %w", cacheDir, err)
@@ -897,13 +905,13 @@ func expandPackage(ctx context.Context, a *APK, pkg *RepositoryPackage) (*expand
 
 	rc, err := a.FetchPackage(ctx, pkg)
 	if err != nil {
-		return nil, fmt.Errorf("fetching package %q: %w", pkg.Name, err)
+		return nil, fmt.Errorf("fetching package %q: %w", pkg.PackageName(), err)
 	}
 	defer rc.Close()
 
 	exp, err := expandapk.ExpandApk(ctx, rc, cacheDir)
 	if err != nil {
-		return nil, fmt.Errorf("expanding %s: %w", pkg.Name, err)
+		return nil, fmt.Errorf("expanding %s: %w", pkg.PackageName(), err)
 	}
 
 	// If we don't have a cache, we're done.
@@ -914,7 +922,7 @@ func expandPackage(ctx context.Context, a *APK, pkg *RepositoryPackage) (*expand
 	return a.cachePackage(ctx, pkg, exp, cacheDir)
 }
 
-func packageAsURI(pkg *RepositoryPackage) (uri.URI, error) {
+func packageAsURI(pkg InstallablePackage) (uri.URI, error) {
 	u := pkg.URL()
 
 	if strings.HasPrefix(u, "https://") {
@@ -924,7 +932,7 @@ func packageAsURI(pkg *RepositoryPackage) (uri.URI, error) {
 	return uri.New(u), nil
 }
 
-func packageAsURL(pkg *RepositoryPackage) (*url.URL, error) {
+func packageAsURL(pkg InstallablePackage) (*url.URL, error) {
 	asURI, err := packageAsURI(pkg)
 	if err != nil {
 		return nil, err
@@ -933,10 +941,10 @@ func packageAsURL(pkg *RepositoryPackage) (*url.URL, error) {
 	return url.Parse(string(asURI))
 }
 
-func (a *APK) FetchPackage(ctx context.Context, pkg *RepositoryPackage) (io.ReadCloser, error) {
-	a.logger.Debugf("fetching %s (%s)", pkg.Name, pkg.Version)
+func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.ReadCloser, error) {
+	a.logger.Debugf("fetching %s", pkg)
 
-	ctx, span := otel.Tracer("go-apk").Start(ctx, "fetchPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "fetchPackage", trace.WithAttributes(attribute.String("package", pkg.PackageName())))
 	defer span.End()
 
 	u := pkg.URL()

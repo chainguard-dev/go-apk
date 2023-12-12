@@ -304,7 +304,7 @@ func (t *cacheTransport) retrieveAndSaveFile(request *http.Request, cp cachePlac
 	return cacheFile, nil
 }
 
-func cacheDirForPackage(root string, pkg *RepositoryPackage) (string, error) {
+func cacheDirForPackage(root string, pkg InstallablePackage) (string, error) {
 	u, err := packageAsURL(pkg)
 	if err != nil {
 		return "", err
