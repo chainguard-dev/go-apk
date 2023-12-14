@@ -832,6 +832,7 @@ func TestCompareVersion(t *testing.T) {
 		{"1.2.3-r0", equal, "1.2.3-r0"},
 		{"0.0_git20230331", less, "0.0_git20230508"},
 		{"2.0.0", less, "2.0.6-r0"},
+		{"6.4_p20231125-r0", greater, "6.4-r2"},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("compare %s %s %s", tt.versionA, tt.expected, tt.versionB), func(t *testing.T) {

@@ -254,19 +254,14 @@ func compareVersions(actual, required packageVersion) versionCompare {
 	}
 	// same pre-suffix numbers
 	// compare post-suffixes
-	// because None is 0 but the lowest priority to make it easy to have a sane default,
-	// but lowest priority, we need some extra logic to handle
-	actualPostSuffix, requiredPostSuffix := actual.postSuffix, required.postSuffix
-	if actualPostSuffix == packageVersionPostModifierNone {
-		actualPostSuffix = packageVersionPostModifierMax
-	}
-	if requiredPostSuffix == packageVersionPostModifierNone {
-		requiredPostSuffix = packageVersionPostModifierMax
-	}
-	if actualPostSuffix > requiredPostSuffix {
+	//
+	// Note that whereas we do a None -> Max transformation for pre-suffixes, we intentionally
+	// leave post-suffixes alone, because they do not indicate a pre-release and should sort
+	// greater than a version lacking a post-suffix.
+	if actual.postSuffix > required.postSuffix {
 		return greater
 	}
-	if actualPostSuffix < requiredPostSuffix {
+	if actual.postSuffix < required.postSuffix {
 		return less
 	}
 	// same post-suffixes, compare post-suffix numbers
