@@ -306,6 +306,18 @@ func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages 
 
 	conflicts = uniqify(conflicts)
 
+	// If more than one package provides the same dependency, we won't be able to install them, so fail early.
+	providers := map[string]string{}
+	for _, pkg := range toInstall {
+		for _, provides := range pkg.Provides {
+			name := p.resolvePackageNameVersionPin(provides).name
+			if have, ok := providers[name]; ok {
+				return toInstall, conflicts, fmt.Errorf("cannot install %s because %s is already provided by %s", pkg.Name, name, have)
+			}
+			providers[name] = pkg.Name
+		}
+	}
+
 	return toInstall, conflicts, nil
 }
 

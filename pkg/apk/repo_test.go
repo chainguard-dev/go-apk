@@ -359,6 +359,7 @@ func testGetPackagesAndIndex() ([]*RepositoryPackage, []*RepositoryWithIndex) {
 			{Name: "package5", Version: "1.5.1"},
 			{Name: "package5", Version: "2.0.0"},
 			{Name: "package5-special", Version: "1.2.0", Provides: []string{"package5=1.2.0"}},
+			{Name: "package5-conflict", Version: "1.2.0", Provides: []string{"package5=1.2.0"}},
 			{Name: "package6", Version: "1.5.1"},
 			{Name: "package6", Version: "2.0.0", Dependencies: []string{"package6", "package5"}},
 			{Name: "package7", Version: "1"},
@@ -453,6 +454,20 @@ func TestGetPackagesWithDependences(t *testing.T) {
 				require.Equal(t, version, pkg.Version)
 			}
 		})
+	})
+	t.Run("conflicting provides", func(t *testing.T) {
+		// If a dependency is resolved by something in world, i.e. the explicit package list,
+		// that should override anything that comes up in dependencies, even if a higher version.
+		// This test checks that an override on something that provides package5, or even is package5,
+		// even with a lower version, will take priority.
+		// we use abc9 -> package5 rather than package9 -> package5, because world sorts alphabetically,
+		// and we want to ensure that, even though abc9 is processed first, package5 override still works.
+		_, index := testGetPackagesAndIndex()
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		names := []string{"package5-special", "package5-conflict", "abc9"}
+		sort.Strings(names)
+		_, _, err := resolver.GetPackagesWithDependencies(context.Background(), names)
+		require.Error(t, err, "provided package should conflict")
 	})
 }
 
@@ -563,7 +578,7 @@ func TestResolvePackage(t *testing.T) {
 		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
 		pkgs, err := resolver.ResolvePackage("package5")
 		require.NoError(t, err)
-		require.Len(t, pkgs, 5)
+		require.Len(t, pkgs, 6)
 	})
 	t.Run("specific version", func(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
@@ -589,7 +604,7 @@ func TestResolvePackage(t *testing.T) {
 		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
 		pkgs, err := resolver.ResolvePackage("package5>1.0.0")
 		require.NoError(t, err)
-		require.Len(t, pkgs, 4)
+		require.Len(t, pkgs, 5)
 		// first version should be highest match
 		require.Equal(t, "2.0.0", pkgs[0].Version)
 	})
