@@ -168,6 +168,7 @@ func (a *APK) installRegularFile(header *tar.Header, tr *tar.Reader,
 				if pk.Origin != pkg.Origin && !isReplaced {
 					continue
 				}
+
 				found = true
 				break
 			}
