@@ -84,6 +84,7 @@ type Package struct {
 	BuildDate        int64    `ini:"builddate"`
 	RepoCommit       string   `ini:"commit"`
 	Replaces         []string `ini:"replaces,,allowshadow"`
+	DataHash         string   `ini:"datahash"`
 }
 
 func (p *Package) String() string {
@@ -96,7 +97,7 @@ func (p *Package) Filename() string {
 	return fmt.Sprintf("%s-%s.apk", p.Name, p.Version)
 }
 
-// ChecksumString returns a human-readable version of the checksum.
+// ChecksumString returns a human-readable version of the control section checksum.
 func (p *Package) ChecksumString() string {
 	return "Q1" + base64.StdEncoding.EncodeToString(p.Checksum)
 }

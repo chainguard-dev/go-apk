@@ -323,10 +323,11 @@ func parseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint
 			}
 		case "F":
 			lastDir = &tar.Header{
-				Name: val,
-				Mode: 0o755,
-				Uid:  0,
-				Gid:  0,
+				Name:     val,
+				Mode:     0o755,
+				Uid:      0,
+				Gid:      0,
+				Typeflag: tar.TypeDir,
 			}
 			pkg.Files = append(pkg.Files, lastDir)
 			lastFile = nil

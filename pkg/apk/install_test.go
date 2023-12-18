@@ -17,12 +17,17 @@ package apk
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha1" //nolint:gosec // this is what apk tools is using
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/require"
 )
@@ -155,33 +160,25 @@ func TestInstallAPKFiles(t *testing.T) {
 			overwriteFilename := "etc/doublewrite" //nolint:goconst
 
 			pkg := &Package{Name: "first", Origin: "first"}
-
-			entries := []testDirEntry{
+			fp1 := fakePackage(t, pkg, []testDirEntry{
 				{"etc", 0o755, true, nil, nil},
 				{overwriteFilename, 0o755, false, originalContent, nil},
-			}
+			})
 
-			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
-			require.NoError(t, err)
-			err = apk.addInstalledPackage(pkg, headers)
-			require.NoError(t, err)
+			pkg2 := &Package{Name: "second", Origin: "second"}
+			fp2 := fakePackage(t, pkg2, []testDirEntry{
+				{"etc", 0o755, true, nil, nil},
+				{overwriteFilename, 0o755, false, finalContent, nil},
+			})
+
+			err = apk.InstallPackages(context.Background(), nil, []InstallablePackage{fp1, fp2})
+			require.Error(t, err, "some double-write error")
 
 			actual, err := src.ReadFile(overwriteFilename)
 			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, originalContent, actual)
 
-			entries = []testDirEntry{
-				{overwriteFilename, 0o755, false, finalContent, nil},
-			}
-
-			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, &Package{Origin: "second"})
-			require.Error(t, err, "some double-write error")
-
-			actual, err = src.ReadFile(overwriteFilename)
-			require.NoError(t, err, "error reading %s", overwriteFilename)
-			require.Equal(t, originalContent, actual)
+			checkDuplicateIDBEntries(t, apk)
 		})
 		t.Run("different origin and content, but with replaces", func(t *testing.T) {
 			apk, src, err := testGetTestAPK()
@@ -192,33 +189,26 @@ func TestInstallAPKFiles(t *testing.T) {
 			overwriteFilename := "etc/doublewrite"
 
 			pkg := &Package{Name: "first", Origin: "first"}
-
-			entries := []testDirEntry{
+			fp1 := fakePackage(t, pkg, []testDirEntry{
 				{"etc", 0755, true, nil, nil},
 				{overwriteFilename, 0755, false, originalContent, nil},
-			}
+			})
 
-			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
-			require.NoError(t, err)
-			err = apk.addInstalledPackage(pkg, headers)
+			pkg2 := &Package{Name: "second", Origin: "second", Replaces: []string{"first"}}
+			fp2 := fakePackage(t, pkg2, []testDirEntry{
+				{"etc", 0755, true, nil, nil},
+				{overwriteFilename, 0755, false, finalContent, nil},
+			})
+
+			err = apk.InstallPackages(context.Background(), nil, []InstallablePackage{fp1, fp2})
 			require.NoError(t, err)
 
 			actual, err := src.ReadFile(overwriteFilename)
 			require.NoError(t, err, "error reading %s", overwriteFilename)
-			require.Equal(t, originalContent, actual)
-
-			entries = []testDirEntry{
-				{overwriteFilename, 0755, false, finalContent, nil},
-			}
-
-			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, &Package{Origin: "second", Replaces: []string{"first"}})
-			require.NoError(t, err)
-
-			actual, err = src.ReadFile(overwriteFilename)
-			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, finalContent, actual)
+
+			// TODO: Uncomment this when we fix it.
+			// checkDuplicateIDBEntries(t, apk)
 		})
 		t.Run("same origin", func(t *testing.T) {
 			apk, src, err := testGetTestAPK()
@@ -228,33 +218,27 @@ func TestInstallAPKFiles(t *testing.T) {
 			finalContent := []byte("extra long I am here")
 			overwriteFilename := "etc/doublewrite"
 
-			entries := []testDirEntry{
+			pkg := &Package{Name: "first", Origin: "first"}
+			fp1 := fakePackage(t, pkg, []testDirEntry{
 				{"etc", 0o755, true, nil, nil},
 				{overwriteFilename, 0o755, false, originalContent, nil},
-			}
-			pkg := &Package{Name: "first", Origin: "first"}
+			})
 
-			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
-			require.NoError(t, err)
-			err = apk.addInstalledPackage(pkg, headers)
+			pkg2 := &Package{Name: "first-compat", Origin: "first"}
+			fp2 := fakePackage(t, pkg2, []testDirEntry{
+				{"etc", 0o755, true, nil, nil},
+				{overwriteFilename, 0o755, false, finalContent, nil},
+			})
+
+			err = apk.InstallPackages(context.Background(), nil, []InstallablePackage{fp1, fp2})
 			require.NoError(t, err)
 
 			actual, err := src.ReadFile(overwriteFilename)
 			require.NoError(t, err, "error reading %s", overwriteFilename)
-			require.Equal(t, originalContent, actual)
-
-			entries = []testDirEntry{
-				{overwriteFilename, 0o755, false, finalContent, nil},
-			}
-
-			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, pkg)
-			require.NoError(t, err)
-
-			actual, err = src.ReadFile(overwriteFilename)
-			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, finalContent, actual)
+
+			// TODO: Uncomment this when we fix it.
+			// checkDuplicateIDBEntries(t, apk)
 		})
 		t.Run("different origin with same content", func(t *testing.T) {
 			apk, src, err := testGetTestAPK()
@@ -264,33 +248,26 @@ func TestInstallAPKFiles(t *testing.T) {
 			overwriteFilename := "etc/doublewrite"
 
 			pkg := &Package{Name: "first", Origin: "first"}
-
-			entries := []testDirEntry{
+			fp1 := fakePackage(t, pkg, []testDirEntry{
 				{"etc", 0o755, true, nil, nil},
 				{overwriteFilename, 0o755, false, originalContent, nil},
-			}
+			})
 
-			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
-			require.NoError(t, err)
-			err = apk.addInstalledPackage(pkg, headers)
+			pkg2 := &Package{Name: "second", Origin: "second"}
+			fp2 := fakePackage(t, pkg2, []testDirEntry{
+				{"etc", 0o755, true, nil, nil},
+				{overwriteFilename, 0o755, false, originalContent, nil},
+			})
+
+			err = apk.InstallPackages(context.Background(), nil, []InstallablePackage{fp1, fp2})
 			require.NoError(t, err)
 
 			actual, err := src.ReadFile(overwriteFilename)
 			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, originalContent, actual)
 
-			entries = []testDirEntry{
-				{overwriteFilename, 0o755, false, originalContent, nil},
-			}
-
-			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, &Package{Origin: "second"})
-			require.NoError(t, err)
-
-			actual, err = src.ReadFile(overwriteFilename)
-			require.NoError(t, err, "error reading %s", overwriteFilename)
-			require.Equal(t, originalContent, actual)
+			// TODO: Uncomment this when we fix it.
+			// checkDuplicateIDBEntries(t, apk)
 		})
 		t.Run("different origin and content, but is replaced", func(t *testing.T) {
 			apk, src, err := testGetTestAPK()
@@ -301,42 +278,153 @@ func TestInstallAPKFiles(t *testing.T) {
 			overwriteFilename := "etc/doublewrite"
 
 			pkg := &Package{Name: "first", Origin: "first", Replaces: []string{"second"}}
-
-			entries := []testDirEntry{
+			fp1 := fakePackage(t, pkg, []testDirEntry{
 				{"etc", 0755, true, nil, nil},
 				{overwriteFilename, 0755, false, originalContent, nil},
-			}
+			})
 
-			r := testCreateTarForPackage(entries)
-			headers, err := apk.installAPKFiles(context.Background(), r, pkg)
-			require.NoError(t, err)
-			err = apk.addInstalledPackage(pkg, headers)
+			pkg2 := &Package{Name: "second", Origin: "second"}
+			fp2 := fakePackage(t, pkg2, []testDirEntry{
+				{"etc", 0755, true, nil, nil},
+				{overwriteFilename, 0755, false, finalContent, nil},
+			})
+
+			err = apk.InstallPackages(context.Background(), nil, []InstallablePackage{fp1, fp2})
 			require.NoError(t, err)
 
 			actual, err := src.ReadFile(overwriteFilename)
 			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, originalContent, actual)
 
-			pkg2 := &Package{Name: "second", Origin: "second"}
-			entries = []testDirEntry{
-				{overwriteFilename, 0755, false, finalContent, nil},
-			}
-
-			r = testCreateTarForPackage(entries)
-			_, err = apk.installAPKFiles(context.Background(), r, pkg2)
-			require.NoError(t, err)
-
-			actual, err = src.ReadFile(overwriteFilename)
-			require.NoError(t, err, "error reading %s", overwriteFilename)
-			require.Equal(t, originalContent, actual)
+			// TODO: Uncomment this when we fix it.
+			// checkDuplicateIDBEntries(t, apk)
 		})
 	})
 }
 
-func testCreateTarForPackage(entries []testDirEntry) io.Reader {
-	var buf bytes.Buffer
-	tw := tar.NewWriter(&buf)
+func checkDuplicateIDBEntries(t *testing.T, apk *APK) {
+	t.Helper()
 
+	// Ensure there are not any files that are owned by two packages.
+	installed, err := apk.GetInstalled()
+	require.NoError(t, err)
+
+	errored := false
+
+	files := map[string]string{}
+	for _, pkg := range installed {
+		for _, f := range pkg.Files {
+			if f.Typeflag == tar.TypeDir {
+				continue
+			}
+
+			owner, ok := files[f.Name]
+			if ok {
+				errored = true
+				t.Errorf("duplicate file entry in idb: %q in packages %q and %q", f.Name, owner, pkg.Name)
+			} else {
+				files[f.Name] = pkg.Name
+			}
+		}
+	}
+
+	if errored {
+		b, err := apk.fs.ReadFile(installedFilePath)
+		require.NoError(t, err)
+		t.Logf("idb contents:\n%s", b)
+	}
+}
+
+type testPackage struct {
+	file     string
+	pkg      *Package
+	checksum string
+}
+
+func (t *testPackage) URL() string {
+	return t.file
+}
+
+func (t *testPackage) PackageName() string {
+	return t.pkg.Name
+}
+
+func (t *testPackage) ChecksumString() string {
+	return t.checksum
+}
+
+func fakePackage(t *testing.T, pkg *Package, entries []testDirEntry) InstallablePackage {
+	t.Helper()
+
+	dir := t.TempDir()
+	f, err := os.CreateTemp(dir, pkg.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := sha1.New() //nolint:gosec
+	dh := sha256.New()
+
+	mw := io.MultiWriter(f, h)
+
+	zw := gzip.NewWriter(mw)
+	tw := tar.NewWriter(zw)
+
+	tmpl := template.New("control")
+	var b bytes.Buffer
+	if err := template.Must(tmpl.Parse(controlTemplate)).Execute(&b, pkg); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     ".PKGINFO",
+		Typeflag: tar.TypeReg,
+		Size:     int64(b.Len()),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tw.Write(b.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tw.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	mw = io.MultiWriter(f, dh)
+	zw.Reset(mw)
+
+	if err := writeFiles(tw, entries); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	pkg.DataHash = base64.StdEncoding.EncodeToString(dh.Sum(nil))
+
+	return &testPackage{
+		pkg:      pkg,
+		file:     f.Name(),
+		checksum: base64.StdEncoding.EncodeToString(h.Sum(nil)),
+	}
+}
+
+func writeFiles(tw *tar.Writer, entries []testDirEntry) error {
 	for _, e := range entries {
 		var header *tar.Header
 		if e.dir {
@@ -366,12 +454,52 @@ func testCreateTarForPackage(entries []testDirEntry) io.Reader {
 
 		err := tw.WriteHeader(header)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		if e.content != nil {
-			_, _ = tw.Write(e.content)
+			_, err = tw.Write(e.content)
+			if err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
+}
+
+func testCreateTarForPackage(entries []testDirEntry) io.Reader {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	if err := writeFiles(tw, entries); err != nil {
+		panic(err)
+	}
+
 	tw.Close()
 	return bytes.NewReader(buf.Bytes())
 }
+
+var controlTemplate = `# generated by apko unit test
+pkgname = {{.Name}}
+pkgver = {{.Version}}
+arch = {{.Arch}}
+size = {{.InstalledSize}}
+origin = {{.Origin}}
+pkgdesc = {{.Description}}
+url = {{.URL}}
+commit = {{.RepoCommit}}
+builddate = {{ .BuildDate }}
+{{- range $dep := .Dependencies }}
+depend = {{ $dep }}
+{{- end }}
+{{- range $dep := .Provides }}
+provides = {{ $dep }}
+{{- end }}
+{{- range $dep := .Replaces }}
+replaces = {{ $dep }}
+{{- end }}
+{{- if .ProviderPriority }}
+provider_priority = {{ .Dependencies.ProviderPriority }}
+{{- end }}
+datahash = {{.DataHash}}
+`
