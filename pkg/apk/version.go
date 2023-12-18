@@ -185,9 +185,9 @@ func parseVersion(version string) (packageVersion, error) {
 type versionCompare int
 
 const (
-	greater versionCompare = 0
-	equal   versionCompare = 1
-	less    versionCompare = 2
+	greater versionCompare = 1
+	equal   versionCompare = 0
+	less    versionCompare = -1
 )
 
 func (vc versionCompare) String() string {
