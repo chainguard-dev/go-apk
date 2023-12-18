@@ -877,9 +877,9 @@ func TestResolveVersion(t *testing.T) {
 		{"2.1.0", versionEqual, "", nil, "", "equal match but pinned"},
 		{"2.1.0", versionEqual, "", pinPackage.RepositoryPackage, "2.1.0", "equal match but pinned yet already installed"},
 		{"2.1.0", versionEqual, "pinA", nil, "2.1.0", "equal match and pin match"},
-		{"", versionNone, "", nil, "2.0.6-r0", "no requirement should get highest version"},
-		{"", versionNone, "", pinPackage.RepositoryPackage, pinPackage.Version, "no requirement should get highest version with pin, if installed"},
-		{"", versionNone, "", lowestPackage.RepositoryPackage, lowestPackage.Version, "no requirement should get installed priority"},
+		{"", versionAny, "", nil, "2.0.6-r0", "no requirement should get highest version"},
+		{"", versionAny, "", pinPackage.RepositoryPackage, pinPackage.Version, "no requirement should get highest version with pin, if installed"},
+		{"", versionAny, "", lowestPackage.RepositoryPackage, lowestPackage.Version, "no requirement should get installed priority"},
 		{"1.6", versionTilde, "", nil, "", "no match"},
 		{"1.7", versionTilde, "", nil, "1.7.1-r1", "fits within"},
 		{"1.7.1", versionTilde, "", nil, "1.7.1-r1", "fits within"},
@@ -913,15 +913,15 @@ func TestResolverPackageNameVersionPin(t *testing.T) {
 		dep     versionDependency
 		pin     string
 	}{
-		{"agetty", "agetty", "", versionNone, ""},
-		{"foo-dev", "foo-dev", "", versionNone, ""},
-		{"name@edge", "name", "", versionNone, "edge"},
+		{"agetty", "agetty", "", versionAny, ""},
+		{"foo-dev", "foo-dev", "", versionAny, ""},
+		{"name@edge", "name", "", versionAny, "edge"},
 		{"name=1.2.3", "name", "1.2.3", versionEqual, ""},
 		{"name>1.2.3", "name", "1.2.3", versionGreater, ""},
 		{"name<1.2.3", "name", "1.2.3", versionLess, ""},
 		{"name>=1.2.3", "name", "1.2.3", versionGreaterEqual, ""},
 		{"name<=1.2.3", "name", "1.2.3", versionLessEqual, ""},
-		{"name@edge=1.2.3", "name@edge=1.2.3", "", versionNone, ""}, // wrong order, so just returns the whole thing
+		{"name@edge=1.2.3", "name@edge=1.2.3", "", versionAny, ""}, // wrong order, so just returns the whole thing
 		{"name=1.2.3@community", "name", "1.2.3", versionEqual, "community"},
 	}
 

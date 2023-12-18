@@ -331,7 +331,7 @@ func includesVersion(actual, required packageVersion) bool {
 type versionDependency int
 
 const (
-	versionNone versionDependency = iota
+	versionAny versionDependency = iota
 	versionEqual
 	versionGreater
 	versionLess
@@ -346,7 +346,7 @@ func (v versionDependency) satisfies(actualVersion, requiredVersion packageVersi
 	}
 	c := compareVersions(actualVersion, requiredVersion)
 	switch v {
-	case versionNone:
+	case versionAny:
 		return true
 	case versionEqual:
 		return c == equal
@@ -375,7 +375,7 @@ func resolvePackageNameVersionPin(pkgName string) pinStuff {
 	if len(parts) == 0 || len(parts[0]) < 2 {
 		return pinStuff{
 			name: pkgName,
-			dep:  versionNone,
+			dep:  versionAny,
 		}
 	}
 	// layout: [full match, name, =version, =|>|<, version, @pin, pin]
@@ -383,7 +383,7 @@ func resolvePackageNameVersionPin(pkgName string) pinStuff {
 		name:    parts[0][1],
 		version: parts[0][4],
 		pin:     parts[0][6],
-		dep:     versionNone,
+		dep:     versionAny,
 	}
 
 	matcher := parts[0][3]
@@ -403,7 +403,7 @@ func resolvePackageNameVersionPin(pkgName string) pinStuff {
 		case "~":
 			p.dep = versionTilde
 		default:
-			p.dep = versionNone
+			p.dep = versionAny
 		}
 	}
 	return p
@@ -443,7 +443,7 @@ func withInstalledPackage(pkg *RepositoryPackage) filterOption {
 
 func (p *PkgResolver) filterPackages(pkgs []*repositoryPackage, opts ...filterOption) []*repositoryPackage {
 	o := &filterOptions{
-		compare: versionNone,
+		compare: versionAny,
 	}
 	for _, opt := range opts {
 		opt(o)
@@ -466,7 +466,7 @@ func (p *PkgResolver) filterPackages(pkgs []*repositoryPackage, opts ...filterOp
 		if (pkg.pinnedName != "" && pkg.pinnedName != o.allowPin && pkg.pinnedName != o.preferPin) && (o.installed == nil || installedURL != pkg.URL()) {
 			continue
 		}
-		if o.compare == versionNone {
+		if o.compare == versionAny {
 			passed = append(passed, pkg)
 			continue
 		}

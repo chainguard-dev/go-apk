@@ -485,7 +485,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 				err1, err2                     error
 			)
 			actualVersion, err1 = p.parseVersion(pkg.Version)
-			if compare != versionNone {
+			if compare != versionAny {
 				requiredVersion, err2 = p.parseVersion(version)
 			}
 			// we accept invalid versions for ourself, but do not try to use it to fulfill
