@@ -207,8 +207,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, finalContent, actual)
 
-			// TODO: Uncomment this when we fix it.
-			// checkDuplicateIDBEntries(t, apk)
+			checkDuplicateIDBEntries(t, apk)
 		})
 		t.Run("same origin", func(t *testing.T) {
 			apk, src, err := testGetTestAPK()
@@ -237,8 +236,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, finalContent, actual)
 
-			// TODO: Uncomment this when we fix it.
-			// checkDuplicateIDBEntries(t, apk)
+			checkDuplicateIDBEntries(t, apk)
 		})
 		t.Run("different origin with same content", func(t *testing.T) {
 			apk, src, err := testGetTestAPK()
@@ -266,8 +264,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, originalContent, actual)
 
-			// TODO: Uncomment this when we fix it.
-			// checkDuplicateIDBEntries(t, apk)
+			checkDuplicateIDBEntries(t, apk)
 		})
 		t.Run("different origin and content, but is replaced", func(t *testing.T) {
 			apk, src, err := testGetTestAPK()
@@ -296,8 +293,7 @@ func TestInstallAPKFiles(t *testing.T) {
 			require.NoError(t, err, "error reading %s", overwriteFilename)
 			require.Equal(t, originalContent, actual)
 
-			// TODO: Uncomment this when we fix it.
-			// checkDuplicateIDBEntries(t, apk)
+			checkDuplicateIDBEntries(t, apk)
 		})
 	})
 }

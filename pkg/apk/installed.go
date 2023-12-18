@@ -65,6 +65,7 @@ func (a *APK) addInstalledPackage(pkg *Package, files []tar.Header) error {
 		perm := f.Mode & 0777
 		user := f.Uid
 		group := f.Gid
+
 		if f.Typeflag == tar.TypeDir {
 			dirName := strings.TrimSuffix(f.Name, fmt.Sprintf("%c", filepath.Separator))
 			pkgLines = append(pkgLines, fmt.Sprintf("F:%s", dirName))
