@@ -927,11 +927,11 @@ func TestResolverPackageNameVersionPin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			stuff := resolvePackageNameVersionPin(tt.input)
-			require.Equal(t, tt.name, stuff.name)
-			require.Equal(t, tt.version, stuff.version)
-			require.Equal(t, tt.dep, stuff.dep)
-			require.Equal(t, tt.pin, stuff.pin)
+			constraint := resolvePackageNameVersionPin(tt.input)
+			require.Equal(t, tt.name, constraint.name)
+			require.Equal(t, tt.version, constraint.version)
+			require.Equal(t, tt.dep, constraint.dep)
+			require.Equal(t, tt.pin, constraint.pin)
 		})
 	}
 }

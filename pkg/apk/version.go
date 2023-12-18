@@ -363,23 +363,23 @@ func (v versionDependency) satisfies(actualVersion, requiredVersion packageVersi
 	}
 }
 
-type pinStuff struct {
+type parsedConstraint struct {
 	name    string
 	version string
 	dep     versionDependency
 	pin     string
 }
 
-func resolvePackageNameVersionPin(pkgName string) pinStuff {
+func resolvePackageNameVersionPin(pkgName string) parsedConstraint {
 	parts := packageNameRegex.FindAllStringSubmatch(pkgName, -1)
 	if len(parts) == 0 || len(parts[0]) < 2 {
-		return pinStuff{
+		return parsedConstraint{
 			name: pkgName,
 			dep:  versionAny,
 		}
 	}
 	// layout: [full match, name, =version, =|>|<, version, @pin, pin]
-	p := pinStuff{
+	p := parsedConstraint{
 		name:    parts[0][1],
 		version: parts[0][4],
 		pin:     parts[0][6],

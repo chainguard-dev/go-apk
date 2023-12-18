@@ -191,7 +191,7 @@ type PkgResolver struct {
 	installIfMap map[string][]*repositoryPackage // contains any package that should be installed if the named package is installed
 
 	parsedVersions map[string]packageVersion
-	depForVersion  map[string]pinStuff
+	depForVersion  map[string]parsedConstraint
 }
 
 // NewPkgResolver creates a new pkgResolver from a list of indexes.
@@ -213,7 +213,7 @@ func NewPkgResolver(ctx context.Context, indexes []NamedIndex) *PkgResolver {
 	p := &PkgResolver{
 		indexes:        indexes,
 		parsedVersions: map[string]packageVersion{},
-		depForVersion:  map[string]pinStuff{},
+		depForVersion:  map[string]parsedConstraint{},
 	}
 
 	// create a map of every package by name and version to its RepositoryPackage
@@ -358,8 +358,8 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 			var matchCount int
 			for _, subDep := range installIfPkg.InstallIf {
 				// two possibilities: package name, or name=version
-				stuff := p.resolvePackageNameVersionPin(subDep)
-				name, version := stuff.name, stuff.version
+				constraint := p.resolvePackageNameVersionPin(subDep)
+				name, version := constraint.name, constraint.version
 				// precise match of whatever it is, take it and continue
 				if _, ok := added[subDep]; ok {
 					matchCount++
@@ -388,8 +388,8 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 // and decreasing from there. In general, the first one in the list is the best match. This function
 // returns multiple in case you need to see all potential matches.
 func (p *PkgResolver) ResolvePackage(pkgName string) ([]*RepositoryPackage, error) {
-	stuff := p.resolvePackageNameVersionPin(pkgName)
-	name, version, compare, pin := stuff.name, stuff.version, stuff.dep, stuff.pin
+	constraint := p.resolvePackageNameVersionPin(pkgName)
+	name, version, compare, pin := constraint.name, constraint.version, constraint.dep, constraint.pin
 	pkgsWithVersions, ok := p.nameMap[name]
 	var packages []*repositoryPackage
 	if ok {
@@ -471,8 +471,8 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 			continue
 		}
 		// this package might be pinned to a version
-		stuff := p.resolvePackageNameVersionPin(dep)
-		name, version, compare := stuff.name, stuff.version, stuff.dep
+		constraint := p.resolvePackageNameVersionPin(dep)
+		name, version, compare := constraint.name, constraint.version, constraint.dep
 		// see if we provide this
 		if myProvides[name] || myProvides[dep] {
 			// we provide this, so skip it
@@ -582,7 +582,7 @@ func (p *PkgResolver) parseVersion(version string) (packageVersion, error) {
 	return parsed, nil
 }
 
-func (p *PkgResolver) resolvePackageNameVersionPin(pkgName string) pinStuff {
+func (p *PkgResolver) resolvePackageNameVersionPin(pkgName string) parsedConstraint {
 	cached, ok := p.depForVersion[pkgName]
 	if ok {
 		return cached
@@ -721,8 +721,8 @@ func (p *PkgResolver) getDepVersionForName(pkg *repositoryPackage, name string) 
 		return pkg.Version
 	}
 	for _, prov := range pkg.Provides {
-		stuff := p.resolvePackageNameVersionPin(prov)
-		pName, pVersion := stuff.name, stuff.version
+		constraint := p.resolvePackageNameVersionPin(prov)
+		pName, pVersion := constraint.name, constraint.version
 		if pVersion == "" {
 			pVersion = pkg.Version
 		}
