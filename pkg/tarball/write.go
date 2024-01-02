@@ -16,6 +16,7 @@ package tarball
 
 import (
 	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha1" //nolint:gosec
 	"encoding/hex"
@@ -26,7 +27,6 @@ import (
 	"syscall"
 
 	"go.opentelemetry.io/otel"
-	gzip "golang.org/x/build/pargzip"
 	"golang.org/x/sys/unix"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
