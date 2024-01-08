@@ -6,7 +6,7 @@ require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
 	github.com/google/go-cmp v0.5.9
 	github.com/hashicorp/go-retryablehttp v0.7.4
-	github.com/klauspost/compress v1.17.2
+	github.com/klauspost/compress v1.17.4
 	github.com/psanford/memfs v0.0.0-20230130182539-4dbf7e3e865e
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
