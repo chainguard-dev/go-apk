@@ -17,6 +17,7 @@ package apk
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -39,7 +40,7 @@ func (a *APK) GetWorld() ([]string, error) {
 // SetWorld sets the list of world packages intended to be installed.
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
 func (a *APK) SetWorld(packages []string) error {
-	a.logger.Infof("setting apk world")
+	slog.Info("setting apk world")
 
 	// sort them before writing
 	copied := make([]string, len(packages))

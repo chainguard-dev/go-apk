@@ -15,18 +15,14 @@
 package apk
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
-	logger "github.com/chainguard-dev/go-apk/pkg/logger"
-	"github.com/sirupsen/logrus"
 )
 
 type opts struct {
-	logger            logger.Logger
 	executor          Executor
 	arch              string
 	ignoreMknodErrors bool
@@ -36,14 +32,6 @@ type opts struct {
 }
 
 type Option func(*opts) error
-
-// WithLogger logger to use. If not provided, will discard all log messages.
-func WithLogger(logger logger.Logger) Option {
-	return func(o *opts) error {
-		o.logger = logger
-		return nil
-	}
-}
 
 // WithExecutor executor to use. Not currently used.
 func WithExecutor(executor Executor) Option {
@@ -111,11 +99,7 @@ func WithCache(cacheDir string, offline bool) Option {
 
 func defaultOpts() *opts {
 	fs := apkfs.DirFS("/")
-	discardLogger := &logrus.Logger{Out: io.Discard}
-	logger := discardLogger
-
 	return &opts{
-		logger:            logger,
 		arch:              ArchToAPK(runtime.GOARCH),
 		ignoreMknodErrors: false,
 		fs:                fs,

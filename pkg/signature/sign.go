@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,21 +31,20 @@ import (
 
 	"github.com/psanford/memfs"
 
-	"github.com/chainguard-dev/go-apk/pkg/logger"
 	"github.com/chainguard-dev/go-apk/pkg/tarball"
 )
 
-func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, indexFile string) error {
+func SignIndex(ctx context.Context, signingKey string, indexFile string) error {
 	is, err := indexIsAlreadySigned(indexFile)
 	if err != nil {
 		return err
 	}
 	if is {
-		logger.Printf("index %s is already signed, doing nothing", indexFile)
+		log.Printf("index %s is already signed, doing nothing", indexFile)
 		return nil
 	}
 
-	logger.Printf("signing index %s with key %s", indexFile, signingKey)
+	log.Printf("signing index %s with key %s", indexFile, signingKey)
 
 	indexData, indexDigest, err := ReadAndHashIndexFile(indexFile)
 	if err != nil {
@@ -56,7 +56,7 @@ func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, ind
 		return fmt.Errorf("unable to sign index: %w", err)
 	}
 
-	logger.Printf("appending signature to index %s", indexFile)
+	log.Printf("appending signature to index %s", indexFile)
 
 	sigFS := memfs.New()
 	if err := sigFS.WriteFile(fmt.Sprintf(".SIGN.RSA.%s.pub", filepath.Base(signingKey)), sigData, 0644); err != nil {
@@ -74,7 +74,7 @@ func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, ind
 		return fmt.Errorf("unable to build tarball context: %w", err)
 	}
 
-	logger.Printf("writing signed index to %s", indexFile)
+	log.Printf("writing signed index to %s", indexFile)
 
 	var sigBuffer bytes.Buffer
 	if err := multitarctx.WriteTargz(ctx, &sigBuffer, sigFS, sigFS); err != nil {
@@ -95,7 +95,7 @@ func SignIndex(ctx context.Context, logger logger.Logger, signingKey string, ind
 		return fmt.Errorf("unable to write index data: %w", err)
 	}
 
-	logger.Printf("signed index %s with key %s", indexFile, signingKey)
+	log.Printf("signed index %s with key %s", indexFile, signingKey)
 
 	return nil
 }
