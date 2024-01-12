@@ -15,12 +15,14 @@
 package apk
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/chainguard-dev/slogctx"
 )
 
 // GetWorld -  get list of packages that should be installed, according to /etc/apk/world
@@ -39,8 +41,9 @@ func (a *APK) GetWorld() ([]string, error) {
 
 // SetWorld sets the list of world packages intended to be installed.
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
-func (a *APK) SetWorld(packages []string) error {
-	slog.Info("setting apk world")
+func (a *APK) SetWorld(ctx context.Context, packages []string) error {
+	log := slogctx.FromContext(ctx)
+	log.Info("setting apk world")
 
 	// sort them before writing
 	copied := make([]string, len(packages))

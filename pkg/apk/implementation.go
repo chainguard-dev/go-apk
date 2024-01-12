@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -35,6 +34,7 @@ import (
 	"time"
 
 	"github.com/chainguard-dev/go-apk/pkg/expandapk"
+	"github.com/chainguard-dev/slogctx"
 	"gopkg.in/ini.v1"
 
 	"go.lsp.dev/uri"
@@ -220,10 +220,11 @@ func (a *APK) ListInitFiles() []tar.Header {
 // unless those files will be included in the installed database, in which case they can
 // be retrieved via GetInstalled().
 func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
+	log := slogctx.FromContext(ctx)
 	/*
 		equivalent of: "apk add --initdb --arch arch --root root"
 	*/
-	slog.Info("initializing apk database")
+	log.Info("initializing apk database")
 
 	// additionalFiles are files we need but can only be resolved in the context of
 	// this func, e.g. we need the architecture
@@ -294,18 +295,19 @@ func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
 			if !errors.As(err, &nokeysErr) {
 				return fmt.Errorf("failed to fetch alpine-keys: %w", err)
 			}
-			slog.Info(fmt.Sprintf("ignoring missing keys: %s", err.Error()))
+			log.Infof("ignoring missing keys: %s", err.Error())
 		}
 	}
 
-	slog.Info("finished initializing apk database")
+	log.Info("finished initializing apk database")
 	return nil
 }
 
 // loadSystemKeyring returns the keys found in the system keyring
 // directory by trying some common locations. These can be overridden
 // by passing one or more directories as arguments.
-func (a *APK) loadSystemKeyring(locations ...string) ([]string, error) {
+func (a *APK) loadSystemKeyring(ctx context.Context, locations ...string) ([]string, error) {
+	log := slogctx.FromContext(ctx)
 	var ring []string
 	if len(locations) == 0 {
 		locations = []string{
@@ -316,7 +318,7 @@ func (a *APK) loadSystemKeyring(locations ...string) ([]string, error) {
 		keyFiles, err := fs.ReadDir(a.fs, d)
 
 		if errors.Is(err, os.ErrNotExist) {
-			slog.Warn(fmt.Sprintf("%s doesn't exist, skipping...", d))
+			log.Warnf("%s doesn't exist, skipping...", d)
 			continue
 		}
 
@@ -331,7 +333,7 @@ func (a *APK) loadSystemKeyring(locations ...string) ([]string, error) {
 			if ext == ".pub" {
 				ring = append(ring, p)
 			} else {
-				slog.Warn(fmt.Sprintf("%s has invalid extension (%s), skipping...", p, ext))
+				log.Warnf("%s has invalid extension (%s), skipping...", p, ext)
 			}
 		}
 	}
@@ -344,7 +346,8 @@ func (a *APK) loadSystemKeyring(locations ...string) ([]string, error) {
 
 // Installs the specified keys into the APK keyring inside the build context.
 func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string) error {
-	slog.Info("initializing apk keyring")
+	log := slogctx.FromContext(ctx)
+	log.Info("initializing apk keyring")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "InitKeyring")
 	defer span.End()
@@ -354,7 +357,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 	}
 
 	if len(extraKeyFiles) > 0 {
-		slog.Debug(fmt.Sprintf("appending %d extra keys to keyring", len(extraKeyFiles)))
+		log.Debugf("appending %d extra keys to keyring", len(extraKeyFiles))
 		keyFiles = append(keyFiles, extraKeyFiles...)
 	}
 
@@ -363,7 +366,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 	for _, element := range keyFiles {
 		element := element
 		eg.Go(func() error {
-			slog.Debug(fmt.Sprintf("installing key %v", element))
+			log.Debugf("installing key %v", element)
 
 			var asURL *url.URL
 			var err error
@@ -437,7 +440,8 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 
 // ResolveWorld determine the target state for the requested dependencies in /etc/apk/world. Does not install anything.
 func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage, conflicts []string, err error) {
-	slog.Info("determining desired apk world")
+	log := slogctx.FromContext(ctx)
+	log.Info("determining desired apk world")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "ResolveWorld")
 	defer span.End()
@@ -449,7 +453,7 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage,
 		return toInstall, conflicts, fmt.Errorf("error getting repository indexes: %w", err)
 	}
 	// debugging info, if requested
-	slog.Debug(fmt.Sprintf("got %d indexes:\n%s", len(indexes), strings.Join(indexNames(indexes), "\n")))
+	log.Debugf("got %d indexes:\n%s", len(indexes), strings.Join(indexNames(indexes), "\n"))
 
 	// 2. Get the dependency tree for each package from the world file
 	directPkgs, err := a.GetWorld()
@@ -461,12 +465,13 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage,
 	if err != nil {
 		return
 	}
-	slog.Debug(fmt.Sprintf("got %d packages to install:\n%s", len(toInstall), strings.Join(packageRefs(toInstall), "\n")))
+	log.Debugf("got %d packages to install:\n%s", len(toInstall), strings.Join(packageRefs(toInstall), "\n"))
 	return
 }
 
 func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
-	slog.Info("resolving and calculating 'world' (packages to install) ")
+	log := slogctx.FromContext(ctx)
+	log.Info("resolving and calculating 'world' (packages to install) ")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
 	defer span.End()
@@ -523,13 +528,14 @@ func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, err
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
 func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error {
+	log := slogctx.FromContext(ctx)
 	/*
 		equivalent of: "apk fix --arch arch --root root"
 		with possible options for --no-scripts, --no-cache, --update-cache
 
 		current default is: cache=false, updateCache=true, executeScripts=false
 	*/
-	slog.Info("synchronizing with desired apk world")
+	log.Info("synchronizing with desired apk world")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "FixateWorld")
 	defer span.End()
@@ -924,6 +930,7 @@ func (a *APK) expandPackage(ctx context.Context, pkg InstallablePackage) (*expan
 }
 
 func expandPackage(ctx context.Context, a *APK, pkg InstallablePackage) (*expandapk.APKExpanded, error) {
+	log := slogctx.FromContext(ctx)
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "expandPackage", trace.WithAttributes(attribute.String("package", pkg.PackageName())))
 	defer span.End()
 
@@ -937,11 +944,11 @@ func expandPackage(ctx context.Context, a *APK, pkg InstallablePackage) (*expand
 
 		exp, err := a.cachedPackage(ctx, pkg, cacheDir)
 		if err == nil {
-			slog.Debug(fmt.Sprintf("cache hit (%s)", pkg.PackageName()))
+			log.Debugf("cache hit (%s)", pkg.PackageName())
 			return exp, nil
 		}
 
-		slog.Debug(fmt.Sprintf("cache miss (%s): %v", pkg.PackageName(), err))
+		log.Debugf("cache miss (%s): %v", pkg.PackageName(), err)
 
 		if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 			return nil, fmt.Errorf("unable to create cache directory %q: %w", cacheDir, err)
@@ -987,7 +994,8 @@ func packageAsURL(pkg InstallablePackage) (*url.URL, error) {
 }
 
 func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.ReadCloser, error) {
-	slog.Debug(fmt.Sprintf("fetching %s", pkg))
+	log := slogctx.FromContext(ctx)
+	log.Debugf("fetching %s", pkg)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "fetchPackage", trace.WithAttributes(attribute.String("package", pkg.PackageName())))
 	defer span.End()
@@ -1068,7 +1076,8 @@ func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
 
 // installPackage installs a single package and updates installed db.
 func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) ([]tar.Header, error) {
-	slog.Debug(fmt.Sprintf("installing %s (%s)", pkg.Name, pkg.Version))
+	log := slogctx.FromContext(ctx)
+	log.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "installPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()

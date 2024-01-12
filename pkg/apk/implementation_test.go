@@ -93,6 +93,7 @@ func TestInitDB(t *testing.T) {
 }
 
 func TestSetWorld(t *testing.T) {
+	ctx := context.Background()
 	src := apkfs.NewMemFS()
 	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
@@ -102,7 +103,7 @@ func TestSetWorld(t *testing.T) {
 
 	// set these packages in a random order; it should write them to world in the correct order
 	packages := []string{"foo", "bar", "abc", "zulu"}
-	err = apk.SetWorld(packages)
+	err = apk.SetWorld(ctx, packages)
 	require.NoError(t, err)
 
 	// check all of the contents
@@ -115,6 +116,7 @@ func TestSetWorld(t *testing.T) {
 }
 
 func TestSetRepositories(t *testing.T) {
+	ctx := context.Background()
 	src := apkfs.NewMemFS()
 	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
@@ -124,7 +126,7 @@ func TestSetRepositories(t *testing.T) {
 	require.NoError(t, err)
 
 	repos := []string{"https://dl-cdn.alpinelinux.org/alpine/v3.16/main", "https://dl-cdn.alpinelinux.org/alpine/v3.16/community"}
-	err = apk.SetRepositories(repos)
+	err = apk.SetRepositories(ctx, repos)
 	require.NoError(t, err)
 
 	// check all of the contents
@@ -136,6 +138,7 @@ func TestSetRepositories(t *testing.T) {
 }
 
 func TestSetRepositories_Empty(t *testing.T) {
+	ctx := context.Background()
 	src := apkfs.NewMemFS()
 	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 	require.NoError(t, err)
@@ -145,7 +148,7 @@ func TestSetRepositories_Empty(t *testing.T) {
 	require.NoError(t, err)
 
 	repos := []string{}
-	err = apk.SetRepositories(repos)
+	err = apk.SetRepositories(ctx, repos)
 	require.Error(t, err)
 }
 
@@ -202,15 +205,17 @@ func TestInitKeyring(t *testing.T) {
 
 func TestLoadSystemKeyring(t *testing.T) {
 	t.Run("non-existent dir", func(t *testing.T) {
+		ctx := context.Background()
 		src := apkfs.NewMemFS()
 		a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 		require.NoError(t, err)
 
 		// Read the empty dir, passing a non-existent location should err
-		_, err = a.loadSystemKeyring("/non/existent/dir")
+		_, err = a.loadSystemKeyring(ctx, "/non/existent/dir")
 		require.Error(t, err)
 	})
 	t.Run("empty dir", func(t *testing.T) {
+		ctx := context.Background()
 		src := apkfs.NewMemFS()
 		a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
 		require.NoError(t, err)
@@ -219,7 +224,7 @@ func TestLoadSystemKeyring(t *testing.T) {
 		emptyDir := "/var/test/keyring"
 		err = src.MkdirAll(emptyDir, 0o755)
 		require.NoError(t, err)
-		_, err = a.loadSystemKeyring(emptyDir)
+		_, err = a.loadSystemKeyring(ctx, emptyDir)
 		require.Error(t, err)
 	})
 	tests := []struct {
@@ -231,6 +236,7 @@ func TestLoadSystemKeyring(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
 			arch := ArchToAPK(runtime.GOARCH)
 			src := apkfs.NewMemFS()
 			a, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
@@ -267,7 +273,7 @@ func TestLoadSystemKeyring(t *testing.T) {
 			))
 
 			// Successful read
-			keyFiles, err := a.loadSystemKeyring(tt.paths...)
+			keyFiles, err := a.loadSystemKeyring(ctx, tt.paths...)
 			require.NoError(t, err)
 			require.Len(t, keyFiles, 5)
 			// should not take into account extraneous files

@@ -1,9 +1,12 @@
 module github.com/chainguard-dev/go-apk
 
-go 1.21
+go 1.21.2
+
+toolchain go1.21.5
 
 require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
+	github.com/chainguard-dev/slogctx v1.2.2
 	github.com/google/go-cmp v0.6.0
 	github.com/hashicorp/go-hclog v0.9.2
 	github.com/hashicorp/go-retryablehttp v0.7.4
