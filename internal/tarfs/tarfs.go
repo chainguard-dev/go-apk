@@ -133,6 +133,22 @@ type FS struct {
 	index map[string]int
 }
 
+func (fsys *FS) Readlink(name string) (string, error) {
+	i, ok := fsys.index[name]
+	if !ok {
+		return "", fs.ErrNotExist
+	}
+
+	e := fsys.files[i]
+
+	switch e.Header.Typeflag {
+	case tar.TypeSymlink, tar.TypeLink:
+		return e.Header.Linkname, nil
+	}
+
+	return "", fmt.Errorf("Readlink(%q): file is not a link", name)
+}
+
 // Open implements fs.FS.
 func (fsys *FS) Open(name string) (fs.File, error) {
 	i, ok := fsys.index[name]
