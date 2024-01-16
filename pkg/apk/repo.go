@@ -23,6 +23,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chainguard-dev/clog"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/otel"
 )
@@ -91,8 +93,9 @@ type repositoryPackage struct {
 
 // SetRepositories sets the contents of /etc/apk/repositories file.
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
-func (a *APK) SetRepositories(repos []string) error {
-	a.logger.Infof("setting apk repositories")
+func (a *APK) SetRepositories(ctx context.Context, repos []string) error {
+	log := clog.FromContext(ctx)
+	log.Info("setting apk repositories")
 
 	if len(repos) == 0 {
 		return fmt.Errorf("must provide at least one repository")
@@ -167,7 +170,9 @@ func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) (
 	}
 	httpClient := a.client
 	if httpClient == nil {
-		httpClient = retryablehttp.NewClient().StandardClient()
+		rhttp := retryablehttp.NewClient()
+		rhttp.Logger = hclog.Default()
+		httpClient = rhttp.StandardClient()
 	}
 	if a.cache != nil {
 		httpClient = a.cache.client(httpClient, true)
