@@ -23,7 +23,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/chainguard-dev/slogctx"
+	"github.com/chainguard-dev/clog"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/otel"
@@ -94,7 +94,7 @@ type repositoryPackage struct {
 // SetRepositories sets the contents of /etc/apk/repositories file.
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
 func (a *APK) SetRepositories(ctx context.Context, repos []string) error {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	log.Info("setting apk repositories")
 
 	if len(repos) == 0 {

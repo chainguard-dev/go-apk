@@ -33,8 +33,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chainguard-dev/clog"
 	"github.com/chainguard-dev/go-apk/pkg/expandapk"
-	"github.com/chainguard-dev/slogctx"
 	"gopkg.in/ini.v1"
 
 	"go.lsp.dev/uri"
@@ -220,7 +220,7 @@ func (a *APK) ListInitFiles() []tar.Header {
 // unless those files will be included in the installed database, in which case they can
 // be retrieved via GetInstalled().
 func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	/*
 		equivalent of: "apk add --initdb --arch arch --root root"
 	*/
@@ -307,7 +307,7 @@ func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
 // directory by trying some common locations. These can be overridden
 // by passing one or more directories as arguments.
 func (a *APK) loadSystemKeyring(ctx context.Context, locations ...string) ([]string, error) {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	var ring []string
 	if len(locations) == 0 {
 		locations = []string{
@@ -346,7 +346,7 @@ func (a *APK) loadSystemKeyring(ctx context.Context, locations ...string) ([]str
 
 // Installs the specified keys into the APK keyring inside the build context.
 func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string) error {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	log.Info("initializing apk keyring")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "InitKeyring")
@@ -440,7 +440,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 
 // ResolveWorld determine the target state for the requested dependencies in /etc/apk/world. Does not install anything.
 func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage, conflicts []string, err error) {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	log.Info("determining desired apk world")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "ResolveWorld")
@@ -470,7 +470,7 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage,
 }
 
 func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	log.Info("resolving and calculating 'world' (packages to install) ")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
@@ -528,7 +528,7 @@ func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, err
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
 func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	/*
 		equivalent of: "apk fix --arch arch --root root"
 		with possible options for --no-scripts, --no-cache, --update-cache
@@ -930,7 +930,7 @@ func (a *APK) expandPackage(ctx context.Context, pkg InstallablePackage) (*expan
 }
 
 func expandPackage(ctx context.Context, a *APK, pkg InstallablePackage) (*expandapk.APKExpanded, error) {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "expandPackage", trace.WithAttributes(attribute.String("package", pkg.PackageName())))
 	defer span.End()
 
@@ -994,7 +994,7 @@ func packageAsURL(pkg InstallablePackage) (*url.URL, error) {
 }
 
 func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.ReadCloser, error) {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	log.Debugf("fetching %s", pkg)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "fetchPackage", trace.WithAttributes(attribute.String("package", pkg.PackageName())))
@@ -1076,7 +1076,7 @@ func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
 
 // installPackage installs a single package and updates installed db.
 func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) ([]tar.Header, error) {
-	log := slogctx.FromContext(ctx)
+	log := clog.FromContext(ctx)
 	log.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "installPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
