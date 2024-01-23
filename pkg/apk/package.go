@@ -94,7 +94,8 @@ func (p *Package) PackageName() string { return p.Name }
 
 // Filename returns the package filename as it's named in a repository.
 func (p *Package) Filename() string {
-	return fmt.Sprintf("%s-%s.apk", p.Name, p.Version)
+	// Note: Doesn't use fmt.Sprintf because we call this a lot when we disqualify images.
+	return p.Name + "-" + p.Version + ".apk"
 }
 
 // ChecksumString returns a human-readable version of the control section checksum.
