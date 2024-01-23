@@ -504,7 +504,7 @@ func TestGetPackageDependencies(t *testing.T) {
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				deps, _, err := resolver.getPackageDependencies(pkg6[0], "", tt.allow, nil, nil)
+				deps, _, err := resolver.getPackageDependencies(pkg6[0], "", tt.allow, nil, nil, nil)
 				require.NoErrorf(t, err, "unable to get dependencies")
 
 				actual := make([]string, 0, len(deps))
@@ -686,9 +686,10 @@ func TestSortPackages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var (
-				pkgs     []*RepositoryPackage
-				pkg      *RepositoryPackage
-				existing = map[string]*RepositoryPackage{}
+				pkgs            []*RepositoryPackage
+				pkg             *RepositoryPackage
+				existing        = map[string]*RepositoryPackage{}
+				existingOrigins = map[string]bool{}
 			)
 			for _, pkg := range tt.pkgs {
 				// we cheat and use the InstalledSize for the preferred order, so that it gets carried around.
@@ -702,10 +703,11 @@ func TestSortPackages(t *testing.T) {
 			}
 			for _, pkg := range tt.existing {
 				existing[pkg.pkg.Name] = NewRepositoryPackage(pkg.pkg, &RepositoryWithIndex{Repository: &Repository{URI: pkg.repo}})
+				existingOrigins[pkg.pkg.Origin] = true
 			}
 			namedPkgs := testNamedPackageFromPackages(pkgs)
 			pr := NewPkgResolver(context.Background(), []NamedIndex{})
-			pr.sortPackages(namedPkgs, pkg, "", existing, "")
+			pr.sortPackages(namedPkgs, pkg, "", existing, existingOrigins, "")
 			for i, pkg := range namedPkgs {
 				require.Equal(t, int(pkg.InstalledSize), i, "position matches")
 			}

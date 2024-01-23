@@ -16,17 +16,18 @@ package apk
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/chainguard-dev/clog"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/otel"
+	"golang.org/x/exp/slices"
 )
 
 // NamedIndex an index that contains all of its packages,
@@ -322,8 +323,12 @@ func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages 
 func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[string]*RepositoryPackage) (*RepositoryPackage, []*RepositoryPackage, []string, error) {
 	parents := make(map[string]bool)
 	localExisting := make(map[string]*RepositoryPackage, len(existing))
+	existingOrigins := map[string]bool{}
 	for k, v := range existing {
 		localExisting[k] = v
+		if v != nil && v.Origin != "" {
+			existingOrigins[v.Origin] = true
+		}
 	}
 
 	pkgs, err := p.ResolvePackage(pkgName)
@@ -336,7 +341,7 @@ func (p *PkgResolver) GetPackageWithDependencies(pkgName string, existing map[st
 	pkg := pkgs[0]
 
 	pin := p.resolvePackageNameVersionPin(pkgName).pin
-	deps, conflicts, err := p.getPackageDependencies(pkg, pin, true, parents, localExisting)
+	deps, conflicts, err := p.getPackageDependencies(pkg, pin, true, parents, localExisting, existingOrigins)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -404,14 +409,14 @@ func (p *PkgResolver) ResolvePackage(pkgName string) ([]*RepositoryPackage, erro
 		if len(packages) == 0 {
 			return nil, fmt.Errorf("could not find package %s in indexes", pkgName)
 		}
-		p.sortPackages(packages, nil, name, nil, pin)
+		p.sortPackages(packages, nil, name, nil, nil, pin)
 	} else {
 		providers, ok := p.providesMap[name]
 		if !ok || len(providers) == 0 {
 			return nil, fmt.Errorf("could not find package, alias or a package that provides %s in indexes", pkgName)
 		}
 		// we are going to do this in reverse order
-		p.sortPackages(providers, nil, name, nil, "")
+		p.sortPackages(providers, nil, name, nil, nil, "")
 		packages = providers
 	}
 	pkgs := make([]*RepositoryPackage, 0, len(packages))
@@ -449,7 +454,7 @@ func (p *PkgResolver) ResolvePackage(pkgName string) ([]*RepositoryPackage, erro
 // It might change the order of install.
 // In other words, this _should_ be a DAG (acyclical), but because the packages
 // are just listing dependencies in text, it might be cyclical. We need to be careful of that.
-func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin string, allowSelfFulfill bool, parents map[string]bool, existing map[string]*RepositoryPackage) (dependencies []*RepositoryPackage, conflicts []string, err error) {
+func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin string, allowSelfFulfill bool, parents map[string]bool, existing map[string]*RepositoryPackage, existingOrigins map[string]bool) (dependencies []*RepositoryPackage, conflicts []string, err error) {
 	// check if the package we are checking is one of our parents, avoid cyclical graphs
 	if _, ok := parents[pkg.Name]; ok {
 		return nil, nil, nil
@@ -515,8 +520,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 			if len(pkgs) == 0 {
 				return nil, nil, fmt.Errorf("could not find package %s in indexes", dep)
 			}
-			p.sortPackages(pkgs, nil, name, existing, "")
-			depPkg = pkgs[0].RepositoryPackage
+			depPkg = p.bestPackage(pkgs, nil, name, existing, existingOrigins, "").RepositoryPackage
 		} else {
 			// it was not the name of a package, see if some package provides this
 			initialProviders, ok := p.providesMap[name]
@@ -546,8 +550,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 				continue
 			}
 			// we are going to do this in reverse order
-			p.sortPackages(providers, pkg, name, existing, "")
-			depPkg = providers[0].RepositoryPackage
+			depPkg = p.bestPackage(providers, pkg, name, existing, existingOrigins, "").RepositoryPackage
 		}
 		// and then recurse to its children
 		// each child gets the parental chain, but should not affect any others,
@@ -557,7 +560,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 			childParents[k] = true
 		}
 		childParents[pkg.Name] = true
-		subDeps, confs, err := p.getPackageDependencies(depPkg, allowPin, true, childParents, existing)
+		subDeps, confs, err := p.getPackageDependencies(depPkg, allowPin, true, childParents, existing, existingOrigins)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -567,6 +570,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 		conflicts = append(conflicts, confs...)
 		for _, dep := range subDeps {
 			existing[dep.Name] = dep
+			existingOrigins[dep.Origin] = true
 		}
 	}
 	return dependencies, conflicts, nil
@@ -608,108 +612,117 @@ func (p *PkgResolver) resolvePackageNameVersionPin(pkgName string) parsedConstra
 // For example, if the original search was for package "a", then pkgs may contain some that
 // are named "a", but others that provided "a". In that case, we should look not at the
 // version of the package, but the version of "a" that the package provides.
-func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *RepositoryPackage, name string, existing map[string]*RepositoryPackage, pin string) { //nolint:gocyclo
-	// get existing origins
-	existingOrigins := make(map[string]bool, len(existing))
-	for _, pkg := range existing {
-		if pkg != nil && pkg.Origin != "" {
-			existingOrigins[pkg.Origin] = true
-		}
-	}
-	sort.Slice(pkgs, func(i, j int) bool {
+func (p *PkgResolver) sortPackages(pkgs []*repositoryPackage, compare *RepositoryPackage, name string, existing map[string]*RepositoryPackage, existingOrigins map[string]bool, pin string) {
+	slices.SortFunc(pkgs, p.comparePackages(compare, name, existing, existingOrigins, pin))
+}
+
+func (p *PkgResolver) comparePackages(compare *RepositoryPackage, name string, existing map[string]*RepositoryPackage, existingOrigins map[string]bool, pin string) func(a, b *repositoryPackage) int { //nolint:gocyclo
+	return func(a, b *repositoryPackage) int {
 		// determine versions
-		iVersionStr := p.getDepVersionForName(pkgs[i], name)
-		jVersionStr := p.getDepVersionForName(pkgs[j], name)
+		iVersionStr := p.getDepVersionForName(a, name)
+		jVersionStr := p.getDepVersionForName(b, name)
 		if compare != nil {
 			// matching repository
 			pkgRepo := compare.Repository().URI
-			iRepo := pkgs[i].Repository().URI
-			jRepo := pkgs[j].Repository().URI
+			iRepo := a.Repository().URI
+			jRepo := b.Repository().URI
 			if iRepo == pkgRepo && jRepo != pkgRepo {
-				return true
+				return -1
 			}
 			if jRepo == pkgRepo && iRepo != pkgRepo {
-				return false
+				return 1
 			}
 			// matching origin with compare
 			pkgOrigin := compare.Origin
-			iOrigin := pkgs[i].Origin
-			jOrigin := pkgs[j].Origin
+			iOrigin := a.Origin
+			jOrigin := b.Origin
 			if iOrigin == pkgOrigin && jOrigin != pkgOrigin {
-				return true
+				return -1
 			}
 			if jOrigin == pkgOrigin && iOrigin != pkgOrigin {
-				return false
+				return 1
 			}
 		}
 		// see if one already is installed
-		iMatched, iOk := existing[pkgs[i].Name]
-		jMatched, jOk := existing[pkgs[j].Name]
+		iMatched, iOk := existing[a.Name]
+		jMatched, jOk := existing[b.Name]
 
 		// because existing takes priority, if either matches, we should take it
 		// check if the first matches
-		if iOk && iMatched.Version == pkgs[i].Version && (!jOk || jMatched.Version != pkgs[j].Version) {
-			return true
+		if iOk && iMatched.Version == a.Version && (!jOk || jMatched.Version != b.Version) {
+			return -1
 		}
 		// the first did not match, check if the second matches
-		if jOk && jMatched.Version == pkgs[j].Version && (!iOk || iMatched.Version != pkgs[i].Version) {
-			return false
+		if jOk && jMatched.Version == b.Version && (!iOk || iMatched.Version != a.Version) {
+			return 1
 		}
 		// both matched, so keep looking
 
 		// see if an origin already is installed
-		iOriginMatched := existingOrigins[pkgs[i].Origin]
-		jOriginMatched := existingOrigins[pkgs[j].Origin]
+		iOriginMatched := existingOrigins[a.Origin]
+		jOriginMatched := existingOrigins[b.Origin]
 		if iOriginMatched && !jOriginMatched {
-			return true
+			return -1
 		}
 		if jOriginMatched && !iOriginMatched {
-			return false
+			return 1
 		}
-		if pkgs[i].pinnedName == pin && pkgs[j].pinnedName != pin {
-			return true
+		if a.pinnedName == pin && b.pinnedName != pin {
+			return -1
 		}
-		if pkgs[i].pinnedName != pin && pkgs[j].pinnedName == pin {
-			return false
+		if a.pinnedName != pin && b.pinnedName == pin {
+			return 1
 		}
 		// check provider priority
-		if pkgs[i].ProviderPriority != pkgs[j].ProviderPriority {
-			return pkgs[i].ProviderPriority > pkgs[j].ProviderPriority
+		if a.ProviderPriority != b.ProviderPriority {
+			if a.ProviderPriority > b.ProviderPriority {
+				return -1
+			}
+
+			// a < b
+			return 1
 		}
 		// both matched or both did not, so just compare versions
 		// version priority
 		iVersion, err := p.parseVersion(iVersionStr)
 		if err != nil {
-			return false
+			return 1
 		}
 		jVersion, err := p.parseVersion(jVersionStr)
 		if err != nil {
 			// If j fails to parse, prefer i.
-			return true
+			return -1
 		}
 		versions := compareVersions(iVersion, jVersion)
 		if versions != equal {
-			return versions == greater
+			return -1 * int(versions)
 		}
 		// if versions are equal, they might not be the same as the package versions
-		if iVersionStr != pkgs[i].Version || jVersionStr != pkgs[j].Version {
-			iVersion, err := p.parseVersion(pkgs[i].Version)
+		if iVersionStr != a.Version || jVersionStr != b.Version {
+			iVersion, err := p.parseVersion(a.Version)
 			if err != nil {
-				return false
+				return 1
 			}
-			jVersion, err := p.parseVersion(pkgs[j].Version)
+			jVersion, err := p.parseVersion(b.Version)
 			if err != nil {
 				// If j fails to parse, prefer i.
-				return true
+				return -1
 			}
 			versions := compareVersions(iVersion, jVersion)
 			if versions != equal {
-				return versions == greater
+				return -1 * int(versions)
 			}
 		}
 		// if versions are equal, compare names
-		return pkgs[i].Name < pkgs[j].Name
-	})
+		return cmp.Compare(a.Name, b.Name)
+	}
+}
+
+func (p *PkgResolver) bestPackage(pkgs []*repositoryPackage, compare *RepositoryPackage, name string, existing map[string]*RepositoryPackage, existingOrigins map[string]bool, pin string) *repositoryPackage {
+	if len(pkgs) == 0 {
+		return nil
+	}
+	return slices.MinFunc(pkgs, p.comparePackages(compare, name, existing, existingOrigins, pin))
 }
 
 // getDepVersionForName get the version of the package that provides the given name.
