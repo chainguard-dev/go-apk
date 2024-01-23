@@ -891,15 +891,17 @@ func TestResolveVersion(t *testing.T) {
 			found := pr.filterPackages(pkgs, withVersion(tt.version, tt.compare), withPreferPin(tt.pin), withInstalledPackage(tt.installed))
 			// add the existing in, if any
 			existing := make(map[string]*RepositoryPackage)
+			existingOrigins := make(map[string]bool)
 			if tt.installed != nil {
 				existing[tt.installed.Name] = tt.installed
+				existingOrigins[tt.installed.Origin] = true
 			}
-			pr.sortPackages(found, nil, "", existing, tt.pin)
+			pkg := pr.bestPackage(found, nil, "", existing, existingOrigins, tt.pin)
 			if tt.want == "" {
-				require.Nil(t, found, "version resolver should not find a package")
+				require.Nil(t, pkg, "version resolver should not find a package")
 			} else {
-				require.NotNil(t, found, "version resolver should find a package")
-				require.Equal(t, found[0].Version, tt.want, "version resolver gets correct version")
+				require.NotNil(t, pkg, "version resolver should find a package")
+				require.Equal(t, pkg.Version, tt.want, "version resolver gets correct version")
 			}
 		})
 	}
