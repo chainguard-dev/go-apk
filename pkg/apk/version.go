@@ -441,7 +441,7 @@ func withInstalledPackage(pkg *RepositoryPackage) filterOption {
 	}
 }
 
-func (p *PkgResolver) filterPackages(pkgs []*repositoryPackage, opts ...filterOption) []*repositoryPackage {
+func (p *PkgResolver) filterPackages(pkgs []*repositoryPackage, dq map[*RepositoryPackage]string, opts ...filterOption) []*repositoryPackage {
 	o := &filterOptions{
 		compare: versionAny,
 	}
@@ -459,6 +459,9 @@ func (p *PkgResolver) filterPackages(pkgs []*repositoryPackage, opts ...filterOp
 		installedURL = o.installed.URL()
 	}
 	for _, pkg := range pkgs {
+		if _, dqed := dq[pkg.RepositoryPackage]; dqed {
+			continue
+		}
 		// do we allow this package?
 
 		// if it has a pinned name, and it is not preferred or allowed, we reject it immediately
