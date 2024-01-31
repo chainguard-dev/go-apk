@@ -267,7 +267,7 @@ func (p *PkgResolver) nextPackage(packages []string, dq map[*RepositoryPackage]s
 	for _, pkgName := range packages {
 		pkgs, err := p.ResolvePackage(pkgName, dq)
 		if err != nil {
-			return "", err
+			return "", &ConstraintError{pkgName, err}
 		}
 		if len(pkgs) == 0 {
 			return "", fmt.Errorf("could not find package %s", pkgName)
@@ -368,7 +368,7 @@ func (p *PkgResolver) constrain(constraints []string, dq map[*RepositoryPackage]
 				actualVersion, err := p.parseVersion(provider.Version)
 				// skip invalid ones
 				if err != nil {
-					p.disqualify(dq, provider.RepositoryPackage, fmt.Sprintf("parsing %q: %v", provider.Version, err))
+					p.disqualify(dq, provider.RepositoryPackage, fmt.Sprintf("parsing version %q failed: %v", provider.Version, err))
 					continue
 				}
 
@@ -427,7 +427,7 @@ func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages 
 
 		pkg, err := p.resolvePackage(next, dq)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, &ConstraintError{next, err}
 		}
 
 		// do not add it to toInstall, as we want to have it in the correct order with dependencies
@@ -445,7 +445,7 @@ func (p *PkgResolver) GetPackagesWithDependencies(ctx context.Context, packages 
 	for _, pkgName := range packages {
 		pkg, deps, confs, err := p.GetPackageWithDependencies(pkgName, dependenciesMap, dq)
 		if err != nil {
-			return nil, nil, err
+			return toInstall, nil, &ConstraintError{pkgName, err}
 		}
 		for _, dep := range deps {
 			if _, ok := installTracked[dep.Name]; !ok {
@@ -696,7 +696,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 				withInstalledPackage(existing[name]),
 			)
 			if len(pkgs) == 0 {
-				return nil, nil, fmt.Errorf("resolving %q deps: %w", pkg.Filename(), maybedqerror(dep, depPkgWithVersions, dq))
+				return nil, nil, &DepError{pkg, maybedqerror(dep, depPkgWithVersions, dq)}
 			}
 			options[dep] = pkgs
 		}
@@ -744,7 +744,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 		childParents[pkg.Name] = true
 		subDeps, confs, err := p.getPackageDependencies(depPkg, allowPin, true, childParents, existing, existingOrigins, dq)
 		if err != nil {
-			return nil, nil, fmt.Errorf("resolving %q deps: %w", pkg.Filename(), err)
+			return nil, nil, &DepError{pkg, err}
 		}
 		// first add the children, then the parent (depth-first)
 		dependencies = append(dependencies, subDeps...)
@@ -935,17 +935,56 @@ func (p *PkgResolver) getDepVersionForName(pkg *repositoryPackage, name string) 
 	return ""
 }
 
+type ConstraintError struct {
+	Constraint string
+	Wrapped    error
+}
+
+func (e *ConstraintError) Unwrap() error {
+	return e.Wrapped
+}
+
+func (e *ConstraintError) Error() string {
+	return fmt.Sprintf("solving %q constraint: %s", e.Constraint, e.Wrapped.Error())
+}
+
+type DepError struct {
+	Package *RepositoryPackage
+	Wrapped error
+}
+
+func (e *DepError) Unwrap() error {
+	return e.Wrapped
+}
+
+func (e *DepError) Error() string {
+	return fmt.Sprintf("resolving %q deps:\n%s", e.Package.Filename(), e.Wrapped.Error())
+}
+
+type DisqualifiedError struct {
+	Package *RepositoryPackage
+	Wrapped error
+}
+
+func (e *DisqualifiedError) Error() string {
+	return fmt.Sprintf("  %s disqualfied because %s", e.Package.Filename(), e.Wrapped.Error())
+}
+
+func (e *DisqualifiedError) Unwrap() error {
+	return e.Wrapped
+}
+
 func maybedqerror(pkgName string, pkgs []*repositoryPackage, dq map[*RepositoryPackage]string) error {
-	errs := []error{}
+	errs := make([]error, 0, len(pkgs))
 	for _, pkg := range pkgs {
-		dqer, ok := dq[pkg.RepositoryPackage]
+		reason, ok := dq[pkg.RepositoryPackage]
 		if ok {
-			errs = append(errs, fmt.Errorf("%s disqualified by %s", pkg.Filename(), dqer))
+			errs = append(errs, &DisqualifiedError{pkg.RepositoryPackage, errors.New(reason)})
 		}
 	}
 
 	if len(errs) != 0 {
-		return fmt.Errorf("package %q cannot be resolved: %w", pkgName, errors.Join(errs...))
+		return errors.Join(errs...)
 	}
 
 	return fmt.Errorf("could not find package %q in indexes", pkgName)
