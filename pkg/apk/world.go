@@ -43,7 +43,7 @@ func (a *APK) GetWorld() ([]string, error) {
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
 func (a *APK) SetWorld(ctx context.Context, packages []string) error {
 	log := clog.FromContext(ctx)
-	log.Info("setting apk world")
+	log.Debug("setting apk world")
 
 	// sort them before writing
 	copied := make([]string, len(packages))
