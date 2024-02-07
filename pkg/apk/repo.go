@@ -98,7 +98,7 @@ type repositoryPackage struct {
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
 func (a *APK) SetRepositories(ctx context.Context, repos []string) error {
 	log := clog.FromContext(ctx)
-	log.Info("setting apk repositories")
+	log.Debug("setting apk repositories")
 
 	if len(repos) == 0 {
 		return fmt.Errorf("must provide at least one repository")

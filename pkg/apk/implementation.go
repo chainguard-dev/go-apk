@@ -224,7 +224,7 @@ func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
 	/*
 		equivalent of: "apk add --initdb --arch arch --root root"
 	*/
-	log.Info("initializing apk database")
+	log.Debug("initializing apk database")
 
 	// additionalFiles are files we need but can only be resolved in the context of
 	// this func, e.g. we need the architecture
@@ -295,11 +295,11 @@ func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
 			if !errors.As(err, &nokeysErr) {
 				return fmt.Errorf("failed to fetch alpine-keys: %w", err)
 			}
-			log.Infof("ignoring missing keys: %s", err.Error())
+			log.Warnf("ignoring missing keys: %v", err)
 		}
 	}
 
-	log.Info("finished initializing apk database")
+	log.Debug("finished initializing apk database")
 	return nil
 }
 
@@ -347,7 +347,7 @@ func (a *APK) loadSystemKeyring(ctx context.Context, locations ...string) ([]str
 // Installs the specified keys into the APK keyring inside the build context.
 func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string) error {
 	log := clog.FromContext(ctx)
-	log.Info("initializing apk keyring")
+	log.Debug("initializing apk keyring")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "InitKeyring")
 	defer span.End()
@@ -441,7 +441,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 // ResolveWorld determine the target state for the requested dependencies in /etc/apk/world. Does not install anything.
 func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage, conflicts []string, err error) {
 	log := clog.FromContext(ctx)
-	log.Info("determining desired apk world")
+	log.Debug("determining desired apk world")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "ResolveWorld")
 	defer span.End()
@@ -471,7 +471,7 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage,
 
 func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
 	log := clog.FromContext(ctx)
-	log.Info("resolving and calculating 'world' (packages to install) ")
+	log.Debug("resolving and calculating 'world' (packages to install)")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
 	defer span.End()
@@ -535,7 +535,7 @@ func (a *APK) FixateWorld(ctx context.Context, sourceDateEpoch *time.Time) error
 
 		current default is: cache=false, updateCache=true, executeScripts=false
 	*/
-	log.Info("synchronizing with desired apk world")
+	log.Debug("synchronizing with desired apk world")
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "FixateWorld")
 	defer span.End()
