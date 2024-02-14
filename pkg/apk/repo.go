@@ -203,10 +203,7 @@ type PkgResolver struct {
 
 // NewPkgResolver creates a new pkgResolver from a list of indexes.
 // The indexes are anything that implements NamedIndex.
-func NewPkgResolver(ctx context.Context, indexes []NamedIndex) *PkgResolver {
-	_, span := otel.Tracer("go-apk").Start(ctx, "NewPkgResolver")
-	defer span.End()
-
+func NewPkgResolver(_ context.Context, indexes []NamedIndex) *PkgResolver {
 	numPackages := 0
 	for _, index := range indexes {
 		numPackages += index.Count()
