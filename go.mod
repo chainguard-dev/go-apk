@@ -9,7 +9,7 @@ require (
 	github.com/chainguard-dev/clog v1.2.3-0.20240116182827-04bee692f7a8
 	github.com/google/go-cmp v0.6.0
 	github.com/hashicorp/go-hclog v1.6.2
-	github.com/hashicorp/go-retryablehttp v0.7.4
+	github.com/hashicorp/go-retryablehttp v0.7.5
 	github.com/klauspost/compress v1.17.7
 	github.com/psanford/memfs v0.0.0-20230130182539-4dbf7e3e865e
 	github.com/stretchr/testify v1.8.4
