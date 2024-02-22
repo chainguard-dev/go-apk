@@ -10,7 +10,7 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/hashicorp/go-hclog v0.9.2
 	github.com/hashicorp/go-retryablehttp v0.7.4
-	github.com/klauspost/compress v1.17.4
+	github.com/klauspost/compress v1.17.7
 	github.com/psanford/memfs v0.0.0-20230130182539-4dbf7e3e865e
 	github.com/stretchr/testify v1.8.4
 	go.lsp.dev/uri v0.3.0
