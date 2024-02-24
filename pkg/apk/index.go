@@ -28,6 +28,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/klauspost/compress/gzip"
 
@@ -43,7 +44,9 @@ var signatureFileRegex = regexp.MustCompile(`^\.SIGN\.RSA\.(.*\.rsa\.pub)$`)
 // This is terrible but simpler than plumbing around a cache for now.
 // We just hold the parsed index in memory rather than re-parsing it every time,
 // which requires gunzipping, which is (somewhat) expensive.
-var globalIndexCache = &indexCache{}
+var globalIndexCache = &indexCache{
+	modtimes: map[string]time.Time{},
+}
 
 type indexResult struct {
 	idx *APKIndex
@@ -51,23 +54,50 @@ type indexResult struct {
 }
 
 type indexCache struct {
-	// repoBase -> *sync.Once
+	// For remote indexes.
 	onces sync.Map
+
+	// For local indexes.
+	sync.Mutex
+	modtimes map[string]time.Time
 
 	// repoBase -> indexResult
 	indexes sync.Map
 }
 
 func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
-	// Do all the expensive things inside the once.
-	once, _ := i.onces.LoadOrStore(u, &sync.Once{})
-	once.(*sync.Once).Do(func() {
-		idx, err := getRepositoryIndex(ctx, u, keys, arch, opts)
-		i.indexes.Store(u, indexResult{
-			idx: idx,
-			err: err,
+	if strings.HasPrefix(u, "https://") {
+		// We don't want remote indexes to change while we're running.
+		once, _ := i.onces.LoadOrStore(u, &sync.Once{})
+		once.(*sync.Once).Do(func() {
+			idx, err := getRepositoryIndex(ctx, u, keys, arch, opts)
+			i.indexes.Store(u, indexResult{
+				idx: idx,
+				err: err,
+			})
 		})
-	})
+	} else {
+		i.Lock()
+		defer i.Unlock()
+
+		// We do expect local indexes to change, so we check modtimes.
+		stat, err := os.Stat(u)
+		if err != nil {
+			return nil, nil
+		}
+
+		mod := stat.ModTime()
+		before, ok := i.modtimes[u]
+		if !ok || mod.After(before) {
+			// If this is the first time or it has changed since the last time...
+			idx, err := getRepositoryIndex(ctx, u, keys, arch, opts)
+			i.indexes.Store(u, indexResult{
+				idx: idx,
+				err: err,
+			})
+			i.modtimes[u] = mod
+		}
+	}
 
 	v, ok := i.indexes.Load(u)
 	if !ok {
