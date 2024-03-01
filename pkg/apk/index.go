@@ -66,7 +66,7 @@ type indexCache struct {
 }
 
 func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
-	if strings.HasPrefix(u, "https://") {
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "s3://") {
 		// We don't want remote indexes to change while we're running.
 		once, _ := i.onces.LoadOrStore(u, &sync.Once{})
 		once.(*sync.Once).Do(func() {
