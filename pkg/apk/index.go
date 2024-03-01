@@ -190,6 +190,15 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 			}
 			return nil, nil
 		}
+	case "s3":
+		body, err := fetchS3(ctx, asURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch object from s3: %w", err)
+		}
+		b, err = io.ReadAll(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read repository index from s3: %w", err)
+		}
 	case "https":
 		client := opts.httpClient
 		if client == nil {
