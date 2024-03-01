@@ -170,7 +170,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 		asURL *url.URL
 		err   error
 	)
-	if strings.HasPrefix(u, "https://") {
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "s3://") {
 		asURL, err = url.Parse(u)
 	} else {
 		// Attempt to parse non-https elements into URI's so they are translated into

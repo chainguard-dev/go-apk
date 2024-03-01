@@ -370,7 +370,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 
 			var asURL *url.URL
 			var err error
-			if strings.HasPrefix(element, "https://") {
+			if strings.HasPrefix(element, "https://") || strings.HasPrefix(element, "s3://") {
 				asURL, err = url.Parse(element)
 			} else {
 				// Attempt to parse non-https elements into URI's so they are translated into
@@ -986,7 +986,7 @@ func expandPackage(ctx context.Context, a *APK, pkg InstallablePackage) (*expand
 func packageAsURI(pkg InstallablePackage) (uri.URI, error) {
 	u := pkg.URL()
 
-	if strings.HasPrefix(u, "https://") {
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "s3://") {
 		return uri.Parse(u)
 	}
 
