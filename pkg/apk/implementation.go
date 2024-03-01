@@ -986,8 +986,10 @@ func expandPackage(ctx context.Context, a *APK, pkg InstallablePackage) (*expand
 func packageAsURI(pkg InstallablePackage) (uri.URI, error) {
 	u := pkg.URL()
 
-	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "s3://") {
+	if strings.HasPrefix(u, "https://") {
 		return uri.Parse(u)
+	} else if strings.HasPrefix(u, "s3://") {
+		return uri.URI(u), nil
 	}
 
 	return uri.New(u), nil
