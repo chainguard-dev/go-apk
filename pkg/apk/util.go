@@ -16,12 +16,12 @@ package apk
 
 import (
 	"archive/tar"
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
-
-	"golang.org/x/exp/slices"
 )
 
 func uniqify[T comparable](s []T) []T {
@@ -56,32 +56,21 @@ func controlValue(controlTar io.Reader, want ...string) (map[string][]string, er
 			continue
 		}
 
-		b, err := io.ReadAll(tr)
-		if err != nil {
-			return nil, fmt.Errorf("unable to read .PKGINFO from control tar.gz file: %w", err)
-		}
-		lines := strings.Split(string(b), "\n")
-		for _, line := range lines {
-			parts := strings.Split(line, "=")
-			if len(parts) != 2 {
+		scanner := bufio.NewScanner(tr)
+		for scanner.Scan() {
+			key, value, ok := strings.Cut(scanner.Text(), "=")
+			if !ok {
 				continue
 			}
-			key := strings.TrimSpace(parts[0])
+			key, value = strings.TrimSpace(key), strings.TrimSpace(value)
 			if !slices.Contains(want, key) {
 				continue
 			}
-
-			values, ok := mapping[key]
-			if !ok {
-				values = []string{}
-			}
-
-			value := strings.TrimSpace(parts[1])
-			values = append(values, value)
-
-			mapping[key] = values
+			mapping[key] = append(mapping[key], value)
 		}
-
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("unable to read .PKGINFO from control tar.gz file: %w", err)
+		}
 		break
 	}
 	return mapping, nil
