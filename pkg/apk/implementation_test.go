@@ -115,6 +115,29 @@ func TestSetWorld(t *testing.T) {
 	require.Equal(t, expected, string(actual), "unexpected content for etc/apk/world:\nexpected %s\nactual %s", expected, actual)
 }
 
+func TestSetWorldWithVersions(t *testing.T) {
+	ctx := context.Background()
+	src := apkfs.NewMemFS()
+	apk, err := New(WithFS(src), WithIgnoreMknodErrors(ignoreMknodErrors))
+	require.NoError(t, err)
+	// for initialization
+	err = src.MkdirAll("etc/apk", 0o755)
+	require.NoError(t, err)
+
+	// set these packages in a random order; it should write them to world in the correct order
+	packages := []string{"foo=1.0.0", "bar=1.2.3", "abc", "zulu", "foo"}
+	err = apk.SetWorld(ctx, packages)
+	require.NoError(t, err)
+
+	// check all of the contents
+	actual, err := src.ReadFile("etc/apk/world")
+	require.NoError(t, err)
+
+	sort.Strings(packages)
+	expected := strings.Join(packages, "\n") + "\n"
+	require.Equal(t, expected, string(actual), "unexpected content for etc/apk/world:\nexpected %s\nactual %s", expected, actual)
+}
+
 func TestSetRepositories(t *testing.T) {
 	ctx := context.Background()
 	src := apkfs.NewMemFS()
