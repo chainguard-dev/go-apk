@@ -57,14 +57,15 @@ import (
 var globalApkCache = &apkCache{}
 
 type APK struct {
-	arch              string
-	version           string
-	fs                apkfs.FullFS
-	executor          Executor
-	ignoreMknodErrors bool
-	client            *http.Client
-	cache             *cache
-	ignoreSignatures  bool
+	arch               string
+	version            string
+	fs                 apkfs.FullFS
+	executor           Executor
+	ignoreMknodErrors  bool
+	client             *http.Client
+	cache              *cache
+	ignoreSignatures   bool
+	noSignatureIndexes []string
 
 	// filename to owning package, last write wins
 	installedFiles map[string]*Package
@@ -81,14 +82,15 @@ func New(options ...Option) (*APK, error) {
 	rhttp.Logger = hclog.Default()
 
 	return &APK{
-		client:            rhttp.StandardClient(),
-		fs:                opt.fs,
-		arch:              opt.arch,
-		executor:          opt.executor,
-		ignoreMknodErrors: opt.ignoreMknodErrors,
-		version:           opt.version,
-		cache:             opt.cache,
-		installedFiles:    map[string]*Package{},
+		client:             rhttp.StandardClient(),
+		fs:                 opt.fs,
+		arch:               opt.arch,
+		executor:           opt.executor,
+		ignoreMknodErrors:  opt.ignoreMknodErrors,
+		version:            opt.version,
+		cache:              opt.cache,
+		noSignatureIndexes: opt.noSignatureIndexes,
+		installedFiles:     map[string]*Package{},
 	}, nil
 }
 

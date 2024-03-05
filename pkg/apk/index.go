@@ -233,9 +233,13 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 	}
 
 	// validate the signature
-	// TODO - ignore signature for base image APKINDEX
-	// Was: !opts.ignoreSignatures
-	if false {
+	shouldCheckSignature := !opts.ignoreSignatures
+	for _, ignoredIndex := range opts.noSignatureIndexes {
+		if IndexURL(ignoredIndex, arch) == u {
+			shouldCheckSignature = false
+		}
+	}
+	if shouldCheckSignature {
 		buf := bytes.NewReader(b)
 		gzipReader, err := gzip.NewReader(buf)
 		if err != nil {
@@ -310,14 +314,21 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 }
 
 type indexOpts struct {
-	ignoreSignatures bool
-	httpClient       *http.Client
+	ignoreSignatures   bool
+	noSignatureIndexes []string
+	httpClient         *http.Client
 }
 type IndexOption func(*indexOpts)
 
 func WithIgnoreSignatures(ignoreSignatures bool) IndexOption {
 	return func(o *indexOpts) {
 		o.ignoreSignatures = ignoreSignatures
+	}
+}
+
+func WithIgnoreSignatureForIndexes(noSignatureIndexes ...string) IndexOption {
+	return func(o *indexOpts) {
+		o.noSignatureIndexes = append(o.noSignatureIndexes, noSignatureIndexes...)
 	}
 }
 
