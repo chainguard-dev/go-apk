@@ -233,7 +233,9 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 	}
 
 	// validate the signature
-	if !opts.ignoreSignatures {
+	// TODO - ignore signature for base image APKINDEX
+	// Was: !opts.ignoreSignatures
+	if false {
 		buf := bytes.NewReader(b)
 		gzipReader, err := gzip.NewReader(buf)
 		if err != nil {

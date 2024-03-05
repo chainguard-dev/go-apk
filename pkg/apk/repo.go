@@ -308,6 +308,7 @@ func (p *PkgResolver) disqualifyProviders(constraint string, dq map[*RepositoryP
 // Disqualify anything that conflicts with the given pkg.
 func (p *PkgResolver) disqualifyConflicts(pkg *RepositoryPackage, dq map[*RepositoryPackage]string) {
 	for _, prov := range pkg.Provides {
+		fmt.Println("HELLO PROVIDE ", prov, " PKG ", pkg.Name)
 		name := p.resolvePackageNameVersionPin(prov).name
 		providers, ok := p.nameMap[name]
 		if !ok {

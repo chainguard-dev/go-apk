@@ -469,18 +469,7 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage,
 	return
 }
 
-func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
-	log := clog.FromContext(ctx)
-	log.Debug("resolving and calculating 'world' (packages to install)")
-
-	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
-	defer span.End()
-
-	allpkgs, _, err := a.ResolveWorld(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error getting package dependencies: %w", err)
-	}
-
+func (a *APK) CalculateWorld(ctx context.Context, allpkgs []*RepositoryPackage) ([]*APKResolved, error) {
 	// TODO: Consider making this configurable option.
 	jobs := runtime.GOMAXPROCS(0)
 
@@ -524,6 +513,21 @@ func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, err
 	}
 
 	return resolved, nil
+}
+
+func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
+	log := clog.FromContext(ctx)
+	log.Debug("resolving and calculating 'world' (packages to install)")
+
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
+	defer span.End()
+
+	allpkgs, _, err := a.ResolveWorld(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error getting package dependencies: %w", err)
+	}
+
+	return a.CalculateWorld(ctx, allpkgs)
 }
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
