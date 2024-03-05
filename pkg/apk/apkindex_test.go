@@ -210,3 +210,36 @@ func TestArchiveFromIndex(t *testing.T) {
 	require.Truef(t, foundApkIndex, "Could not locate file %s in archive", apkIndexFilename)
 	require.Truef(t, foundDescription, "Could not locate file %s in archive", descriptionFilename)
 }
+
+func TestEmptyRepeatedFields(t *testing.T) {
+	apkIndexFile := strings.NewReader(heredoc.Doc(`
+		C:Q1Deb0jNytkrjPW4N/eKLZ43BwOlw=
+		P:a-pkg
+		V:1.2.3-r1
+		A:x86_64
+		S:9180
+		I:40960
+		T:A sample package
+		U:http://a.package.org
+		L:Apache-2.0
+		o:a-pkg
+		m:maintainer <maint@iner.org>
+		t:1600096848
+		c:af13bd168c9d86ede4ad1be5c4ceac79253a7e26
+		D:
+		p:
+		i:abc xyz
+		k:9001
+		
+	`))
+
+	packages, err := ParsePackageIndex(io.NopCloser(apkIndexFile))
+	require.NoError(t, err)
+
+	require.Len(t, packages, 1, "Expected exactly 1 package")
+
+	pkg := packages[0]
+
+	require.Len(t, pkg.Provides, 0, "Expected no provides")
+	require.Len(t, pkg.Dependencies, 0, "Expected no dependancies")
+}
