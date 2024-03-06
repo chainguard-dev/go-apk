@@ -44,7 +44,7 @@ func (a *APK) GetInstalled() ([]*InstalledPackage, error) {
 		return nil, fmt.Errorf("could not open installed file in %s at %s: %w", a.fs, installedFilePath, err)
 	}
 	defer installedFile.Close()
-	return parseInstalled(installedFile)
+	return ParseInstalled(installedFile)
 }
 
 // addInstalledPackage add a package to the list of installed packages
@@ -230,7 +230,7 @@ func (a *APK) readTriggers() (io.ReadCloser, error) {
 }
 
 // parseInstalled parses an installed file. It returns the installed packages.
-func parseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint:gocyclo
+func ParseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint:gocyclo
 	if closer, ok := installed.(io.Closer); ok {
 		defer closer.Close()
 	}
