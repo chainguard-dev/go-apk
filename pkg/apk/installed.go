@@ -34,7 +34,7 @@ import (
 
 type InstalledPackage struct {
 	Package
-	Files []*tar.Header
+	Files []tar.Header
 }
 
 // getInstalledPackages get list of installed packages
@@ -48,7 +48,7 @@ func (a *APK) GetInstalled() ([]*InstalledPackage, error) {
 }
 
 // addInstalledPackage add a package to the list of installed packages
-func (a *APK) addInstalledPackage(pkg *Package, files []tar.Header) error {
+func (a *APK) AddInstalledPackage(pkg *Package, files []tar.Header) error {
 	// be sure to open the file in append mode so we add to the end
 	installedFile, err := a.fs.OpenFile(installedFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
@@ -331,7 +331,7 @@ func ParseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint
 				Gid:      0,
 				Typeflag: tar.TypeDir,
 			}
-			pkg.Files = append(pkg.Files, lastDir)
+			pkg.Files = append(pkg.Files, *lastDir)
 			lastFile = nil
 		case "M":
 			// directory perms if not 0o755
@@ -356,7 +356,7 @@ func ParseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint
 				Uid:  0,
 				Gid:  0,
 			}
-			pkg.Files = append(pkg.Files, lastFile)
+			pkg.Files = append(pkg.Files, *lastFile)
 		case "a":
 			// file perms if not 0o644
 			if lastFile == nil {

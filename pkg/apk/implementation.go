@@ -684,7 +684,7 @@ func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, a
 			return owner != pkg
 		})
 
-		if err := a.addInstalledPackage(pkg, files); err != nil {
+		if err := a.AddInstalledPackage(pkg, files); err != nil {
 			return fmt.Errorf("unable to update installed file for pkg %s: %w", pkg.Name, err)
 		}
 	}
