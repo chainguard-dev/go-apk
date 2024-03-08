@@ -1077,7 +1077,7 @@ func packageInfo(exp *expandapk.APKExpanded) (*Package, error) {
 // installPackage installs a single package and updates installed db.
 func (a *APK) installPackage(ctx context.Context, pkg *Package, expanded *expandapk.APKExpanded, sourceDateEpoch *time.Time) ([]tar.Header, error) {
 	log := clog.FromContext(ctx)
-	log.Debugf("installing %s (%s)", pkg.Name, pkg.Version)
+	log.Infof("installing %s (%s)", pkg.Name, pkg.Version)
 
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "installPackage", trace.WithAttributes(attribute.String("package", pkg.Name)))
 	defer span.End()
