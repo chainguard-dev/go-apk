@@ -97,6 +97,9 @@ type repositoryPackage struct {
 // SetRepositories sets the contents of /etc/apk/repositories file.
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
 func (a *APK) SetRepositories(ctx context.Context, repos []string) error {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "SetRepositories")
+	defer span.End()
+
 	log := clog.FromContext(ctx)
 	log.Debug("setting apk repositories")
 
@@ -132,7 +135,7 @@ func (a *APK) GetRepositories() (repos []string, err error) {
 // GetRepositoryIndexes returns the indexes for the repositories in the specified root.
 // The signatures for each index are verified unless ignoreSignatures is set to true.
 func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) ([]NamedIndex, error) {
-	ctx, span := otel.Tracer("go-apk").Start(ctx, "getRepositoryIndexes")
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "GetRepositoryIndexes")
 	defer span.End()
 
 	// get the repository URLs

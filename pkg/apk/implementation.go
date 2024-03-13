@@ -226,6 +226,9 @@ func (a *APK) InitDB(ctx context.Context, alpineVersions ...string) error {
 	*/
 	log.Debug("initializing apk database")
 
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "InitDB")
+	defer span.End()
+
 	// additionalFiles are files we need but can only be resolved in the context of
 	// this func, e.g. we need the architecture
 	additionalFiles := []file{
