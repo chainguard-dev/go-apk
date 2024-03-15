@@ -13,6 +13,8 @@ import (
 	"context"
 	"crypto/sha1"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -26,6 +28,10 @@ import (
 	"github.com/klauspost/compress/gzip"
 
 	"go.opentelemetry.io/otel"
+)
+
+const (
+	paxRecordsChecksumKey = "APK-TOOLS.checksum.SHA1"
 )
 
 // APKExpanded contains information about and reference to an expanded APK package.
@@ -330,6 +336,8 @@ func (r *expandApkReader) EnableFastRead() {
 //
 // Returns an APKExpanded struct containing references to the file. You *must* call APKExpanded.Close()
 // when finished to clean up the various files.
+//
+// If you want to avoid expensive caching, use [Split] instead.
 func ExpandApk(ctx context.Context, source io.Reader, cacheDir string) (*APKExpanded, error) {
 	ctx, span := otel.Tracer("go-apk").Start(ctx, "ExpandApk")
 	defer span.End()
@@ -519,4 +527,36 @@ func checkSums(ctx context.Context, r io.Reader) error {
 	}
 
 	return nil
+}
+
+func checksumFromHeader(header *tar.Header) ([]byte, error) {
+	pax := header.PAXRecords
+	if pax == nil {
+		return nil, nil
+	}
+
+	hexsum, ok := pax[paxRecordsChecksumKey]
+	if !ok {
+		return nil, nil
+	}
+
+	if strings.HasPrefix(hexsum, "Q1") {
+		// This is nonstandard but something we did at one point, handle it.
+		// In other contexts, this Q1 prefix means "this is sha1 not md5".
+		b64 := strings.TrimPrefix(hexsum, "Q1")
+
+		checksum, err := base64.StdEncoding.DecodeString(b64)
+		if err != nil {
+			return nil, fmt.Errorf("decoding base64 checksum from header for %q: %w", header.Name, err)
+		}
+
+		return checksum, nil
+	}
+
+	checksum, err := hex.DecodeString(hexsum)
+	if err != nil {
+		return nil, fmt.Errorf("decoding hex checksum from header for %q: %w", header.Name, err)
+	}
+
+	return checksum, nil
 }
