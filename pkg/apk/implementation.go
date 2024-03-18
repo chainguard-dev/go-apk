@@ -37,7 +37,6 @@ import (
 	"github.com/chainguard-dev/go-apk/pkg/expandapk"
 	"gopkg.in/ini.v1"
 
-	"go.lsp.dev/uri"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -371,22 +370,14 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 		eg.Go(func() error {
 			log.Debugf("installing key %v", element)
 
-			var asURL *url.URL
-			var err error
-			if strings.HasPrefix(element, "https://") {
-				asURL, err = url.Parse(element)
-			} else {
-				// Attempt to parse non-https elements into URI's so they are translated into
-				// file:// URLs allowing them to parse into a url.URL{}
-				asURL, err = url.Parse(string(uri.New(element)))
-			}
+			asURL, err := url.Parse(element)
 			if err != nil {
 				return fmt.Errorf("failed to parse key as URI: %w", err)
 			}
 
 			var data []byte
 			switch asURL.Scheme {
-			case "file": //nolint:goconst
+			case "", "file": //nolint:goconst
 				data, err = os.ReadFile(element)
 				if err != nil {
 					return fmt.Errorf("failed to read apk key: %w", err)
@@ -977,25 +968,6 @@ func expandPackage(ctx context.Context, a *APK, pkg InstallablePackage) (*expand
 	return a.cachePackage(ctx, pkg, exp, cacheDir)
 }
 
-func packageAsURI(pkg InstallablePackage) (uri.URI, error) {
-	u := pkg.URL()
-
-	if strings.HasPrefix(u, "https://") {
-		return uri.Parse(u)
-	}
-
-	return uri.New(u), nil
-}
-
-func packageAsURL(pkg InstallablePackage) (*url.URL, error) {
-	asURI, err := packageAsURI(pkg)
-	if err != nil {
-		return nil, err
-	}
-
-	return url.Parse(string(asURI))
-}
-
 func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.ReadCloser, error) {
 	log := clog.FromContext(ctx)
 	log.Debugf("fetching %s", pkg)
@@ -1008,13 +980,13 @@ func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.Read
 	// Normalize the repo as a URI, so that local paths
 	// are translated into file:// URLs, allowing them to be parsed
 	// into a url.URL{}.
-	asURL, err := packageAsURL(pkg)
+	asURL, err := url.Parse(u)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse package as URL: %w", err)
 	}
 
 	switch asURL.Scheme {
-	case "file":
+	case "", "file":
 		f, err := os.Open(u)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read repository package apk %s: %w", u, err)

@@ -30,12 +30,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/klauspost/compress/gzip"
-
 	sign "github.com/chainguard-dev/go-apk/pkg/signature"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-retryablehttp"
-	"go.lsp.dev/uri"
+	"github.com/klauspost/compress/gzip"
 	"go.opentelemetry.io/otel"
 )
 
@@ -66,7 +64,13 @@ type indexCache struct {
 }
 
 func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
-	if strings.HasPrefix(u, "https://") {
+	asURL, err := url.Parse(u)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse key as URI: %w", err)
+	}
+
+	switch asURL.Scheme {
+	case "https":
 		// We don't want remote indexes to change while we're running.
 		once, _ := i.onces.LoadOrStore(u, &sync.Once{})
 		once.(*sync.Once).Do(func() {
@@ -76,7 +80,7 @@ func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, 
 				err: err,
 			})
 		})
-	} else {
+	case "", "file":
 		i.Lock()
 		defer i.Unlock()
 
@@ -97,6 +101,8 @@ func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, 
 			})
 			i.modtimes[u] = mod
 		}
+	default:
+		return nil, fmt.Errorf("scheme %s not supported", asURL.Scheme)
 	}
 
 	v, ok := i.indexes.Load(u)
@@ -165,24 +171,14 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 	// Normalize the repo as a URI, so that local paths
 	// are translated into file:// URLs, allowing them to be parsed
 	// into a url.URL{}.
-	var (
-		b     []byte
-		asURL *url.URL
-		err   error
-	)
-	if strings.HasPrefix(u, "https://") {
-		asURL, err = url.Parse(u)
-	} else {
-		// Attempt to parse non-https elements into URI's so they are translated into
-		// file:// URLs allowing them to parse into a url.URL{}
-		asURL, err = url.Parse(string(uri.New(u)))
-	}
+	var b []byte
+	asURL, err := url.Parse(u)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse repo as URI: %w", err)
 	}
 
 	switch asURL.Scheme {
-	case "file":
+	case "", "file":
 		b, err = os.ReadFile(u)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
