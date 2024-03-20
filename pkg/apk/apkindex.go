@@ -127,10 +127,14 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 		case "U":
 			pkg.URL = val
 		case "D":
+			// Splitting empty string results in single element array with one empty string, which would
+			// be treated as package with empty name.
 			if val != "" {
 				pkg.Dependencies = strings.Split(val, " ")
 			}
 		case "p":
+			// Splitting empty string results in single element array with one empty string, which would
+			// be treated as package with empty name.
 			if val != "" {
 				pkg.Provides = strings.Split(val, " ")
 			}

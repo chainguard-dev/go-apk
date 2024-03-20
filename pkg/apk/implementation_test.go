@@ -157,7 +157,7 @@ func TestSetRepositories(t *testing.T) {
 	require.NoError(t, err)
 
 	expected := strings.Join(repos, "\n") + "\n"
-	require.Equal(t, expected, string(actual), "unexpected content for etc/apk/repositories:\nexpected %s\nactual %s", expected, actual)
+	require.Equal(t, expected, string(actual))
 }
 
 func TestSetRepositories_Empty(t *testing.T) {
