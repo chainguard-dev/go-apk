@@ -23,10 +23,13 @@ import (
 	"io/fs"
 	"path"
 	"strings"
+	"testing/iotest"
 	"time"
 
 	"golang.org/x/exp/slices"
 )
+
+var emptyReader = iotest.ErrReader(io.EOF)
 
 type Entry struct {
 	Header tar.Header
@@ -114,16 +117,22 @@ func (f *File) ReadAt(p []byte, off int64) (int, error) {
 		return ra.ReadAt(p, f.Entry.Offset+off)
 	}
 
-	// Otherwise do a Seek and ReadFull.
-	if _, err := f.handle.Seek(f.Entry.Offset+off, io.SeekStart); err != nil {
-		return 0, err
+	if f.handle != nil {
+		// Otherwise do a Seek and ReadFull.
+		if _, err := f.handle.Seek(f.Entry.Offset+off, io.SeekStart); err != nil {
+			return 0, err
+		}
+		f.r = io.LimitReader(f.handle, f.Entry.Header.Size-off)
 	}
-	f.r = io.LimitReader(f.handle, f.Entry.Header.Size-off)
 
 	return io.ReadFull(f.r, p)
 }
 
 func (f *File) Close() error {
+	if f.handle == nil {
+		return nil
+	}
+
 	return f.handle.Close()
 }
 
@@ -164,6 +173,7 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 	}
 
 	if e.Header.Size == 0 {
+		f.r = emptyReader
 		return f, nil
 	}
 
