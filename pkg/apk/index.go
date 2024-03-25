@@ -161,6 +161,18 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 	return indexes, nil
 }
 
+func shouldCheckSignatureForIndex(index string, arch string, opts *indexOpts) bool {
+	if opts.ignoreSignatures {
+		return false
+	}
+	for _, ignoredIndex := range opts.noSignatureIndexes {
+		if IndexURL(ignoredIndex, arch) == index {
+			return false
+		}
+	}
+	return true
+}
+
 func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
 	// Normalize the repo as a URI, so that local paths
 	// are translated into file:// URLs, allowing them to be parsed
@@ -233,13 +245,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 	}
 
 	// validate the signature
-	shouldCheckSignature := !opts.ignoreSignatures
-	for _, ignoredIndex := range opts.noSignatureIndexes {
-		if IndexURL(ignoredIndex, arch) == u {
-			shouldCheckSignature = false
-		}
-	}
-	if shouldCheckSignature {
+	if shouldCheckSignatureForIndex(u, arch, opts) {
 		buf := bytes.NewReader(b)
 		gzipReader, err := gzip.NewReader(buf)
 		if err != nil {

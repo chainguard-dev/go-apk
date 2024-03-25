@@ -241,5 +241,5 @@ func TestEmptyRepeatedFields(t *testing.T) {
 	pkg := packages[0]
 
 	require.Len(t, pkg.Provides, 0, "Expected no provides")
-	require.Len(t, pkg.Dependencies, 0, "Expected no dependancies")
+	require.Len(t, pkg.Dependencies, 0, "Expected no dependencies")
 }
