@@ -149,7 +149,7 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 			pkg.BuildDate = i
 			pkg.BuildTime = time.Unix(i, 0).UTC()
 		case "i":
-			pkg.InstallIf = strings.Split(val, " ")
+			pkg.InstallIf = splitRepeatedField(val)
 		case "S":
 			size, err := strconv.ParseUint(val, 10, 64)
 			if err != nil {
