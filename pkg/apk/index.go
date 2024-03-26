@@ -147,7 +147,7 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 
 		index, err := globalIndexCache.get(ctx, u, keys, arch, opts)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading index %s: %w", u, err)
 		}
 
 		// Can happen for fs.ErrNotExist in file scheme, we just ignore it.
