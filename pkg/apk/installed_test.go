@@ -84,8 +84,8 @@ func TestAddInstalledPackage(t *testing.T) {
 			paxRecordsChecksumKey: "91abf197227d2fe71d016f4ccb68b16c9c9b2768",
 		}}, // should generate extra a: perms line
 	}
-	// addInstalledPackage(pkg *Package, files []tar.Header) error
-	err = a.addInstalledPackage(newPkg, newFiles)
+	// AddInstalledPackage(pkg *Package, files []tar.Header) error
+	err = a.AddInstalledPackage(newPkg, newFiles)
 	require.NoErrorf(t, err, "unable to add installed package: %v", err)
 	// check that the new packages were added
 	pkgs, err := a.GetInstalled()
