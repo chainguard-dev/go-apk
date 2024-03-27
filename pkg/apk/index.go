@@ -66,7 +66,7 @@ type indexCache struct {
 }
 
 func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
-	if strings.HasPrefix(u, "https://") {
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "s3://") {
 		// We don't want remote indexes to change while we're running.
 		once, _ := i.onces.LoadOrStore(u, &sync.Once{})
 		once.(*sync.Once).Do(func() {
@@ -182,7 +182,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 		asURL *url.URL
 		err   error
 	)
-	if strings.HasPrefix(u, "https://") {
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "s3://") {
 		asURL, err = url.Parse(u)
 	} else {
 		// Attempt to parse non-https elements into URI's so they are translated into
@@ -201,6 +201,15 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 				return nil, fmt.Errorf("failed to read repository %s: %w", u, err)
 			}
 			return nil, nil
+		}
+	case "s3":
+		body, err := fetchS3(ctx, asURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch object from s3: %w", err)
+		}
+		b, err = io.ReadAll(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read repository index from s3: %w", err)
 		}
 	case "https":
 		client := opts.httpClient
