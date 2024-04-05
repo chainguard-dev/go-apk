@@ -1,8 +1,6 @@
 module github.com/chainguard-dev/go-apk
 
-go 1.21.2
-
-toolchain go1.21.5
+go 1.22
 
 require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
