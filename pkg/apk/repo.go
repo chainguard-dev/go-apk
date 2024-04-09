@@ -984,7 +984,7 @@ func maybedqerror(pkgName string, pkgs []*repositoryPackage, dq map[*RepositoryP
 	}
 
 	if len(errs) != 0 {
-		return errors.Join(errs...)
+		return fmt.Errorf("solving %q: %w", pkgName, errors.Join(errs...))
 	}
 
 	return fmt.Errorf("could not find package %q in indexes", pkgName)
