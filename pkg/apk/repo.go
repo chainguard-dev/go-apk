@@ -974,7 +974,7 @@ func (e *DisqualifiedError) Unwrap() error {
 	return e.Wrapped
 }
 
-func maybedqerror(pkgName string, pkgs []*repositoryPackage, dq map[*RepositoryPackage]string) error {
+func maybedqerror(constraint string, pkgs []*repositoryPackage, dq map[*RepositoryPackage]string) error {
 	errs := make([]error, 0, len(pkgs))
 	for _, pkg := range pkgs {
 		reason, ok := dq[pkg.RepositoryPackage]
@@ -984,8 +984,8 @@ func maybedqerror(pkgName string, pkgs []*repositoryPackage, dq map[*RepositoryP
 	}
 
 	if len(errs) != 0 {
-		return fmt.Errorf("solving %q: %w", pkgName, errors.Join(errs...))
+		return &ConstraintError{constraint, errors.Join(errs...)}
 	}
 
-	return fmt.Errorf("could not find package %q in indexes", pkgName)
+	return fmt.Errorf("could not find constraint %q in indexes", constraint)
 }
