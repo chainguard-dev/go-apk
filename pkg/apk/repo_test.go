@@ -486,6 +486,30 @@ func TestGetPackagesWithDependences(t *testing.T) {
 			require.Equal(t, got, want[i])
 		}
 	})
+	t.Run("stricter requirement wins", func(t *testing.T) {
+		_, index := testGetPackagesAndIndex()
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		names := []string{"package5>1.0.0", "package5=1.5.1"}
+		sort.Strings(names)
+		install, _, err := resolver.GetPackagesWithDependencies(context.Background(), names)
+		require.NoError(t, err)
+		want := []string{
+			"package5-1.5.1",
+		}
+		require.Equal(t, len(install), len(want))
+		for i := range install {
+			got := install[i].Package.Name + "-" + install[i].Package.Version
+			require.Equal(t, want[i], got)
+		}
+	})
+	t.Run("conflicting requirements", func(t *testing.T) {
+		_, index := testGetPackagesAndIndex()
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		names := []string{"package5=1.0.0", "package5=1.5.1"}
+		sort.Strings(names)
+		_, _, err := resolver.GetPackagesWithDependencies(context.Background(), names)
+		require.Error(t, err, "Packages should conflict")
+	})
 }
 
 func TestGetPackageDependencies(t *testing.T) {

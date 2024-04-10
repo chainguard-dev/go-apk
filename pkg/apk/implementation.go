@@ -57,14 +57,15 @@ import (
 var globalApkCache = &apkCache{}
 
 type APK struct {
-	arch              string
-	version           string
-	fs                apkfs.FullFS
-	executor          Executor
-	ignoreMknodErrors bool
-	client            *http.Client
-	cache             *cache
-	ignoreSignatures  bool
+	arch               string
+	version            string
+	fs                 apkfs.FullFS
+	executor           Executor
+	ignoreMknodErrors  bool
+	client             *http.Client
+	cache              *cache
+	ignoreSignatures   bool
+	noSignatureIndexes []string
 
 	// filename to owning package, last write wins
 	installedFiles map[string]*Package
@@ -81,14 +82,15 @@ func New(options ...Option) (*APK, error) {
 	rhttp.Logger = hclog.Default()
 
 	return &APK{
-		client:            rhttp.StandardClient(),
-		fs:                opt.fs,
-		arch:              opt.arch,
-		executor:          opt.executor,
-		ignoreMknodErrors: opt.ignoreMknodErrors,
-		version:           opt.version,
-		cache:             opt.cache,
-		installedFiles:    map[string]*Package{},
+		client:             rhttp.StandardClient(),
+		fs:                 opt.fs,
+		arch:               opt.arch,
+		executor:           opt.executor,
+		ignoreMknodErrors:  opt.ignoreMknodErrors,
+		version:            opt.version,
+		cache:              opt.cache,
+		noSignatureIndexes: opt.noSignatureIndexes,
+		installedFiles:     map[string]*Package{},
 	}, nil
 }
 
@@ -472,18 +474,7 @@ func (a *APK) ResolveWorld(ctx context.Context) (toInstall []*RepositoryPackage,
 	return
 }
 
-func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
-	log := clog.FromContext(ctx)
-	log.Debug("resolving and calculating 'world' (packages to install)")
-
-	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
-	defer span.End()
-
-	allpkgs, _, err := a.ResolveWorld(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("error getting package dependencies: %w", err)
-	}
-
+func (a *APK) CalculateWorld(ctx context.Context, allpkgs []*RepositoryPackage) ([]*APKResolved, error) {
 	// TODO: Consider making this configurable option.
 	jobs := runtime.GOMAXPROCS(0)
 
@@ -527,6 +518,21 @@ func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, err
 	}
 
 	return resolved, nil
+}
+
+func (a *APK) ResolveAndCalculateWorld(ctx context.Context) ([]*APKResolved, error) {
+	log := clog.FromContext(ctx)
+	log.Debug("resolving and calculating 'world' (packages to install)")
+
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "CalculateWorld")
+	defer span.End()
+
+	allpkgs, _, err := a.ResolveWorld(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error getting package dependencies: %w", err)
+	}
+
+	return a.CalculateWorld(ctx, allpkgs)
 }
 
 // FixateWorld force apk's resolver to re-resolve the requested dependencies in /etc/apk/world.
@@ -681,7 +687,7 @@ func (a *APK) InstallPackages(ctx context.Context, sourceDateEpoch *time.Time, a
 			return owner != pkg
 		})
 
-		if err := a.addInstalledPackage(pkg, files); err != nil {
+		if err := a.AddInstalledPackage(pkg, files); err != nil {
 			return fmt.Errorf("unable to update installed file for pkg %s: %w", pkg.Name, err)
 		}
 	}

@@ -147,7 +147,7 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 
 		index, err := globalIndexCache.get(ctx, u, keys, arch, opts)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading index %s: %w", u, err)
 		}
 
 		// Can happen for fs.ErrNotExist in file scheme, we just ignore it.
@@ -159,6 +159,18 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 		indexes = append(indexes, NewNamedRepositoryWithIndex(repoName, repoRef.WithIndex(index)))
 	}
 	return indexes, nil
+}
+
+func shouldCheckSignatureForIndex(index string, arch string, opts *indexOpts) bool {
+	if opts.ignoreSignatures {
+		return false
+	}
+	for _, ignoredIndex := range opts.noSignatureIndexes {
+		if IndexURL(ignoredIndex, arch) == index {
+			return false
+		}
+	}
+	return true
 }
 
 func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
@@ -233,7 +245,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 	}
 
 	// validate the signature
-	if !opts.ignoreSignatures {
+	if shouldCheckSignatureForIndex(u, arch, opts) {
 		buf := bytes.NewReader(b)
 		gzipReader, err := gzip.NewReader(buf)
 		if err != nil {
@@ -308,14 +320,21 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 }
 
 type indexOpts struct {
-	ignoreSignatures bool
-	httpClient       *http.Client
+	ignoreSignatures   bool
+	noSignatureIndexes []string
+	httpClient         *http.Client
 }
 type IndexOption func(*indexOpts)
 
 func WithIgnoreSignatures(ignoreSignatures bool) IndexOption {
 	return func(o *indexOpts) {
 		o.ignoreSignatures = ignoreSignatures
+	}
+}
+
+func WithIgnoreSignatureForIndexes(noSignatureIndexes ...string) IndexOption {
+	return func(o *indexOpts) {
+		o.noSignatureIndexes = append(o.noSignatureIndexes, noSignatureIndexes...)
 	}
 }
 

@@ -79,6 +79,15 @@ type APKIndex struct { //nolint:revive
 	Packages    []*Package
 }
 
+// Splitting empty string results in single element array with one empty string, which would
+// be treated as package with empty name.
+func splitRepeatedField(val string) []string {
+	if val == "" {
+		return nil
+	}
+	return strings.Split(val, " ")
+}
+
 // ParsePackageIndex parses a plain (uncompressed) APKINDEX file. It returns an
 // ApkIndex struct
 func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
@@ -127,9 +136,9 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 		case "U":
 			pkg.URL = val
 		case "D":
-			pkg.Dependencies = strings.Split(val, " ")
+			pkg.Dependencies = splitRepeatedField(val)
 		case "p":
-			pkg.Provides = strings.Split(val, " ")
+			pkg.Provides = splitRepeatedField(val)
 		case "c":
 			pkg.RepoCommit = val
 		case "t":
@@ -140,7 +149,7 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 			pkg.BuildDate = i
 			pkg.BuildTime = time.Unix(i, 0).UTC()
 		case "i":
-			pkg.InstallIf = strings.Split(val, " ")
+			pkg.InstallIf = splitRepeatedField(val)
 		case "S":
 			size, err := strconv.ParseUint(val, 10, 64)
 			if err != nil {

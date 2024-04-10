@@ -23,12 +23,13 @@ import (
 )
 
 type opts struct {
-	executor          Executor
-	arch              string
-	ignoreMknodErrors bool
-	fs                apkfs.FullFS
-	version           string
-	cache             *cache
+	executor           Executor
+	arch               string
+	ignoreMknodErrors  bool
+	fs                 apkfs.FullFS
+	version            string
+	cache              *cache
+	noSignatureIndexes []string
 }
 
 type Option func(*opts) error
@@ -93,6 +94,13 @@ func WithCache(cacheDir string, offline bool) Option {
 			dir:     cacheDir,
 			offline: offline,
 		}
+		return nil
+	}
+}
+
+func WithNoSignatureIndexes(noSignatureIndex ...string) Option {
+	return func(o *opts) error {
+		o.noSignatureIndexes = append(o.noSignatureIndexes, noSignatureIndex...)
 		return nil
 	}
 }
