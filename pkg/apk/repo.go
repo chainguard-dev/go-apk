@@ -97,6 +97,9 @@ type repositoryPackage struct {
 // SetRepositories sets the contents of /etc/apk/repositories file.
 // The base directory of /etc/apk must already exist, i.e. this only works on an initialized APK database.
 func (a *APK) SetRepositories(ctx context.Context, repos []string) error {
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "SetRepositories")
+	defer span.End()
+
 	log := clog.FromContext(ctx)
 	log.Debug("setting apk repositories")
 
@@ -132,7 +135,7 @@ func (a *APK) GetRepositories() (repos []string, err error) {
 // GetRepositoryIndexes returns the indexes for the repositories in the specified root.
 // The signatures for each index are verified unless ignoreSignatures is set to true.
 func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) ([]NamedIndex, error) {
-	ctx, span := otel.Tracer("go-apk").Start(ctx, "getRepositoryIndexes")
+	ctx, span := otel.Tracer("go-apk").Start(ctx, "GetRepositoryIndexes")
 	defer span.End()
 
 	// get the repository URLs
@@ -180,7 +183,7 @@ func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) (
 	if a.cache != nil {
 		httpClient = a.cache.client(httpClient, true)
 	}
-	return GetRepositoryIndexes(ctx, repos, keys, arch, WithIgnoreSignatures(ignoreSignatures), WithHTTPClient(httpClient))
+	return GetRepositoryIndexes(ctx, repos, keys, arch, WithIgnoreSignatures(ignoreSignatures), WithHTTPClient(httpClient), WithIgnoreSignatureForIndexes(a.noSignatureIndexes...))
 }
 
 // PkgResolver resolves packages from a list of indexes.
@@ -971,7 +974,7 @@ func (e *DisqualifiedError) Unwrap() error {
 	return e.Wrapped
 }
 
-func maybedqerror(pkgName string, pkgs []*repositoryPackage, dq map[*RepositoryPackage]string) error {
+func maybedqerror(constraint string, pkgs []*repositoryPackage, dq map[*RepositoryPackage]string) error {
 	errs := make([]error, 0, len(pkgs))
 	for _, pkg := range pkgs {
 		reason, ok := dq[pkg.RepositoryPackage]
@@ -981,8 +984,8 @@ func maybedqerror(pkgName string, pkgs []*repositoryPackage, dq map[*RepositoryP
 	}
 
 	if len(errs) != 0 {
-		return errors.Join(errs...)
+		return &ConstraintError{constraint, errors.Join(errs...)}
 	}
 
-	return fmt.Errorf("could not find package %q in indexes", pkgName)
+	return fmt.Errorf("could not find constraint %q in indexes", constraint)
 }

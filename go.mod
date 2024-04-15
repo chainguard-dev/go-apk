@@ -11,17 +11,17 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.51.1
 	github.com/chainguard-dev/clog v1.3.1
 	github.com/google/go-cmp v0.6.0
-	github.com/hashicorp/go-hclog v1.6.2
+	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-retryablehttp v0.7.5
-	github.com/klauspost/compress v1.17.7
+	github.com/klauspost/compress v1.17.8
 	github.com/psanford/memfs v0.0.0-20230130182539-4dbf7e3e865e
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	go.lsp.dev/uri v0.3.0
-	go.opentelemetry.io/otel v1.24.0
-	go.opentelemetry.io/otel/trace v1.24.0
+	go.opentelemetry.io/otel v1.25.0
+	go.opentelemetry.io/otel/trace v1.25.0
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
-	golang.org/x/sync v0.6.0
-	golang.org/x/sys v0.17.0
+	golang.org/x/sync v0.7.0
+	golang.org/x/sys v0.19.0
 	gopkg.in/ini.v1 v1.67.0
 )
 
@@ -49,6 +49,6 @@ require (
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	go.opentelemetry.io/otel/metric v1.24.0 // indirect
+	go.opentelemetry.io/otel/metric v1.25.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
