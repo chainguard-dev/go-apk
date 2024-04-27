@@ -239,6 +239,10 @@ func ParseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint
 
 	indexScanner := bufio.NewScanner(installed)
 
+	// Increase max token size from default of 64 KiB to account for large dependency lists.
+	maxTokenSize := 1 << 20 // 1 MiB
+	indexScanner.Buffer(make([]byte, maxTokenSize), maxTokenSize)
+
 	pkg := &InstalledPackage{}
 	linenr := 1
 	var lastDir, lastFile *tar.Header

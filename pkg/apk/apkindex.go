@@ -97,6 +97,10 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 
 	indexScanner := bufio.NewScanner(apkIndexUnpacked)
 
+	// Increase max token size from default of 64 KiB to account for large dependency lists.
+	maxTokenSize := 1 << 20 // 1 MiB
+	indexScanner.Buffer(make([]byte, maxTokenSize), maxTokenSize)
+
 	pkg := &Package{}
 	linenr := 1
 

@@ -39,6 +39,7 @@ var testInstalledPackages = []*Package{
 	{Name: "alpine-baselayout", Version: "3.2.0-r22"},
 	{Name: "alpine-keys", Version: "2.4-r1"},
 	{Name: "ca-certificates-bundle", Version: "20220614-r0"},
+	{Name: "coq", Version: "8.19.1-r3"},
 	{Name: "libcrypto1.1", Version: "1.1.1q-r0"},
 	{Name: "libssl1.1", Version: "1.1.1q-r0"},
 	{Name: "ssl_client", Version: "1.35.0-r17"},

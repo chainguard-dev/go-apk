@@ -243,3 +243,60 @@ func TestEmptyRepeatedFields(t *testing.T) {
 	require.Len(t, pkg.Provides, 0, "Expected no provides")
 	require.Len(t, pkg.Dependencies, 0, "Expected no dependencies")
 }
+
+func TestLargeDependencyList(t *testing.T) {
+	assert := assert.New(t)
+
+	apkIndexContents := heredoc.Doc(`
+		C:Q1Pi7+Lp0TdU9DNxeZKvFbOSjmncw=
+		P:a-pkg
+		V:1.2.3-r1
+		A:x86_64
+		S:9180
+		I:40960
+		T:A sample package
+		U:http://a.package.org
+		L:Apache-2.0
+		o:a-pkg
+		m:maintainer <maint@iner.org>
+		t:1600096848
+		c:af13bd168c9d86ede4ad1be5c4ceac79253a7e26
+		D:LARGE_DEPENDENCY_LIST
+		p:LARGE_PROVIDE_LIST
+		i:abc xyz
+		k:9001
+
+		C:Q1Pi7+Lp0TdU9DNxeZKvFbOSjmncw=
+		P:b-pkg
+		V:1.1.1-r1
+		A:x86_64
+		S:5243
+		I:11392
+		T:Another package
+		U:http://b.package.org
+		L:Apache-2.0
+		o:b-pkg
+		m:maintainer <maint@iner.org>
+		t:1600096848
+		c:af13bd168c9d86ede4ad1be5c4ceac79253a7e26
+		D:so:libc.musl-x86_64.so.1
+		p:thing3 thing4
+		i:def uvw
+		k:9002
+
+	`)
+
+	apkIndexContents = strings.ReplaceAll(
+		apkIndexContents, "LARGE_DEPENDENCY_LIST", strings.Repeat("fake-dependency ", 10_000))
+	apkIndexContents = strings.ReplaceAll(
+		apkIndexContents, "LARGE_PROVIDE_LIST", strings.Repeat("fake-provide ", 10_000))
+
+	apkIndexFile := strings.NewReader(apkIndexContents)
+
+	packages, _ := ParsePackageIndex(io.NopCloser(apkIndexFile))
+
+	require.Len(t, packages, 2, "Expected exactly 2 package")
+
+	assert.Equal("a-pkg", packages[0].Name)
+	assert.Equal("b-pkg", packages[1].Name)
+}
