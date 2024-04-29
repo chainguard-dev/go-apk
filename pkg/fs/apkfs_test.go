@@ -103,7 +103,7 @@ func TestReadAPKFile(t *testing.T) {
 		defer apkfs.Close()
 		// Find a specific file by walking the filesystem
 		found := false
-		err = fs.WalkDir(apkfs, ".", func(name string, d fs.DirEntry, err error) error {
+		err = fs.WalkDir(apkfs, ".", func(_ string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
