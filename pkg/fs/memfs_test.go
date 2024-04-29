@@ -436,7 +436,7 @@ func TestMemFSConsistentOrdering(t *testing.T) {
 	var results []string
 	for i := 0; i < 10; i++ {
 		var result []string
-		err := fs.WalkDir(m, "/", func(path string, d fs.DirEntry, err error) error {
+		err := fs.WalkDir(m, "/", func(path string, _ fs.DirEntry, err error) error {
 			require.NoError(t, err)
 			result = append(result, path)
 			return nil

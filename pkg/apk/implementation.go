@@ -16,6 +16,7 @@ package apk
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
@@ -844,9 +845,14 @@ func (a *APK) cachedPackage(ctx context.Context, pkg InstallablePackage, cacheDi
 	exp.ControlFile = ctl
 	exp.ControlHash = checksum
 
-	exp.ControlFS, err = tarfs.New(exp.ControlData)
+	control, err := exp.ControlData()
 	if err != nil {
 		return nil, err
+	}
+
+	exp.ControlFS, err = tarfs.New(bytes.NewReader(control), int64(len(control)))
+	if err != nil {
+		return nil, fmt.Errorf("indexing %q: %w", exp.ControlFile, err)
 	}
 
 	exp.Size += cf.Size()
@@ -884,7 +890,15 @@ func (a *APK) cachedPackage(ctx context.Context, pkg InstallablePackage, cacheDi
 	}
 
 	exp.TarFile = strings.TrimSuffix(exp.PackageFile, ".gz")
-	exp.TarFS, err = tarfs.New(exp.PackageData)
+	data, err := exp.PackageData()
+	if err != nil {
+		return nil, err
+	}
+	info, err := data.Stat()
+	if err != nil {
+		return nil, err
+	}
+	exp.TarFS, err = tarfs.New(data, info.Size())
 	if err != nil {
 		return nil, err
 	}
