@@ -967,7 +967,7 @@ type DisqualifiedError struct {
 }
 
 func (e *DisqualifiedError) Error() string {
-	return fmt.Sprintf("  %s disqualfied because %s", e.Package.Filename(), e.Wrapped.Error())
+	return fmt.Sprintf("  %s disqualified because %s", e.Package.Filename(), e.Wrapped.Error())
 }
 
 func (e *DisqualifiedError) Unwrap() error {
