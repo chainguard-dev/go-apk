@@ -314,6 +314,12 @@ func ParseInstalled(installed io.Reader) ([]*InstalledPackage, error) { //nolint
 				return nil, fmt.Errorf("cannot parse provider priority field %s: %w", val, err)
 			}
 			pkg.ProviderPriority = priority
+		case "q":
+			priority, err := strconv.ParseUint(val, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("cannot parse replaces priority field %s: %w", val, err)
+			}
+			pkg.ReplacesPriority = priority
 		case "C":
 			// Handle SHA1 checksums:
 			if strings.HasPrefix(val, "Q1") {

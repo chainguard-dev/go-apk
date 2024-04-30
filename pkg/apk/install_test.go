@@ -497,5 +497,8 @@ replaces = {{ $dep }}
 {{- if .ProviderPriority }}
 provider_priority = {{ .Dependencies.ProviderPriority }}
 {{- end }}
+{{- if .ReplacesPriority }}
+replaces_priority = {{ .Dependencies.ReplacesPriority }}
+{{- end }}
 datahash = {{.DataHash}}
 `
