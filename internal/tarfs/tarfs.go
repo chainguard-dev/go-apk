@@ -212,12 +212,13 @@ func New(ra io.ReaderAt, size int64) (*FS, error) {
 	}
 
 	for _, f := range fsys.files {
-		dirs := fsys.dirs[f.dir]
-		var de fs.DirEntry = f
-		pos, _ := slices.BinarySearchFunc(dirs, de, func(a, b fs.DirEntry) int {
+		fsys.dirs[f.dir] = append(fsys.dirs[f.dir], f)
+	}
+
+	for _, files := range fsys.dirs {
+		slices.SortFunc(files, func(a, b fs.DirEntry) int {
 			return cmp.Compare(a.Name(), b.Name())
 		})
-		fsys.dirs[f.dir] = slices.Insert(dirs, pos, de)
 	}
 
 	return fsys, nil
