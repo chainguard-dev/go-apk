@@ -182,7 +182,7 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 		linenr++
 	}
 
-	return packages, nil
+	return packages, indexScanner.Err()
 }
 
 func IndexFromArchive(archive io.ReadCloser) (*APKIndex, error) {
