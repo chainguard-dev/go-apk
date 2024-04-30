@@ -104,14 +104,30 @@ func (fsys *FS) Readlink(name string) (string, error) {
 	return "", fmt.Errorf("Readlink(%q): file is not a link", name)
 }
 
-// Open implements fs.FS.
-func (fsys *FS) Open(name string) (fs.File, error) {
+const maxHops = 64
+
+// open follows symlinks up to [maxHops] times.
+func (fsys *FS) open(name string, hops int) (fs.File, error) {
+	if hops > maxHops {
+		return nil, fmt.Errorf("Open(%q): chased too many (%d) symlinks", name, maxHops)
+	}
+
 	i, ok := fsys.index[name]
 	if !ok {
 		return nil, fs.ErrNotExist
 	}
 
 	e := fsys.files[i]
+
+	switch e.Header.Typeflag {
+	case tar.TypeSymlink, tar.TypeLink:
+		link := e.Header.Linkname
+		if path.IsAbs(link) {
+			return fsys.open(link, hops+1)
+		}
+
+		return fsys.open(path.Join(e.dir, link), hops+1)
+	}
 
 	f := &File{
 		fsys:  fsys,
@@ -121,6 +137,11 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 	f.sr = io.NewSectionReader(fsys.ra, e.Offset, e.Header.Size)
 
 	return f, nil
+}
+
+// Open implements fs.FS.
+func (fsys *FS) Open(name string) (fs.File, error) {
+	return fsys.open(name, 0)
 }
 
 func (fsys *FS) Entries() []*Entry {
