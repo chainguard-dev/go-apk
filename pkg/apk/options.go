@@ -106,10 +106,8 @@ func WithNoSignatureIndexes(noSignatureIndex ...string) Option {
 }
 
 func defaultOpts() *opts {
-	fs := apkfs.DirFS("/")
 	return &opts{
 		arch:              ArchToAPK(runtime.GOARCH),
 		ignoreMknodErrors: false,
-		fs:                fs,
 	}
 }
