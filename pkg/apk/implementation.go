@@ -82,6 +82,11 @@ func New(options ...Option) (*APK, error) {
 	rhttp := retryablehttp.NewClient()
 	rhttp.Logger = hclog.Default()
 
+	if opt.fs == nil {
+		// This is expensive so we only want to do it if we aren't passed WithFS.
+		opt.fs = apkfs.DirFS("/")
+	}
+
 	return &APK{
 		client:             rhttp.StandardClient(),
 		fs:                 opt.fs,
