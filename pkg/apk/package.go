@@ -15,7 +15,6 @@
 package apk
 
 import (
-	"archive/tar"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -112,16 +111,12 @@ func ParsePackage(ctx context.Context, apkPackage io.Reader) (*Package, error) {
 
 	defer expanded.Close()
 
-	control, err := expanded.ControlData()
+	r, err := expanded.ControlFS.Open(".PKGINFO")
 	if err != nil {
 		return nil, fmt.Errorf("expanded.ControlData(): %v", err)
 	}
-	tarRead := tar.NewReader(control)
-	if _, err = tarRead.Next(); err != nil {
-		return nil, fmt.Errorf("tarRead.Next(): %v", err)
-	}
 
-	cfg, err := ini.ShadowLoad(tarRead)
+	cfg, err := ini.ShadowLoad(r)
 	if err != nil {
 		return nil, fmt.Errorf("ini.ShadowLoad(): %w", err)
 	}

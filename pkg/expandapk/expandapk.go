@@ -68,15 +68,7 @@ type APKExpanded struct {
 
 const meg = 1 << 20
 
-type nopRSK struct {
-	io.ReadSeeker
-}
-
-func (n nopRSK) Close() error {
-	return nil
-}
-
-func (a *APKExpanded) ControlData() (io.ReadSeekCloser, error) {
+func (a *APKExpanded) ControlData() ([]byte, error) {
 	a.Lock()
 	defer a.Unlock()
 	if a.controlData == nil {
@@ -97,10 +89,10 @@ func (a *APKExpanded) ControlData() (io.ReadSeekCloser, error) {
 		}
 	}
 
-	return nopRSK{bytes.NewReader(a.controlData)}, nil
+	return a.controlData, nil
 }
 
-func (a *APKExpanded) PackageData() (io.ReadSeekCloser, error) {
+func (a *APKExpanded) PackageData() (*os.File, error) {
 	uf, err := os.Open(a.TarFile)
 	if err == nil {
 		return uf, nil
@@ -183,10 +175,13 @@ func (m *multiReadCloser) Close() error {
 }
 
 func (a *APKExpanded) Close() error {
-	if a.tempDir == "" {
-		return nil
+	errs := []error{}
+
+	if a.tempDir != "" {
+		errs = append(errs, os.RemoveAll(a.tempDir))
 	}
-	return os.RemoveAll(a.tempDir)
+
+	return errors.Join(errs...)
 }
 
 // An implementation of io.Writer designed specifically for use in the expandApk() method.
@@ -462,15 +457,29 @@ func ExpandApk(ctx context.Context, source io.Reader, cacheDir string) (*APKExpa
 		expanded.SignatureFile = gzipStreams[0]
 	}
 
-	expanded.ControlFS, err = tarfs.New(expanded.ControlData)
+	control, err := expanded.ControlData()
+	if err != nil {
+		return nil, err
+	}
+
+	expanded.ControlFS, err = tarfs.New(bytes.NewReader(control), int64(len(control)))
 	if err != nil {
 		return nil, fmt.Errorf("indexing %q: %w", expanded.ControlFile, err)
 	}
 
 	expanded.TarFile = strings.TrimSuffix(expanded.PackageFile, ".gz")
 
+	data, err := expanded.PackageData()
+	if err != nil {
+		return nil, err
+	}
+	info, err := data.Stat()
+	if err != nil {
+		return nil, err
+	}
+
 	// TODO: We could overlap this with checkSums.
-	expanded.TarFS, err = tarfs.New(expanded.PackageData)
+	expanded.TarFS, err = tarfs.New(data, info.Size())
 	if err != nil {
 		return nil, fmt.Errorf("indexing %q: %w", expanded.TarFile, err)
 	}

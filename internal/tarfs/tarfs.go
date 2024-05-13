@@ -17,19 +17,15 @@ package tarfs
 import (
 	"archive/tar"
 	"bufio"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"path"
-	"strings"
-	"testing/iotest"
+	"slices"
 	"time"
-
-	"golang.org/x/exp/slices"
 )
-
-var emptyReader = iotest.ErrReader(io.EOF)
 
 type Entry struct {
 	Header tar.Header
@@ -60,10 +56,9 @@ func (e Entry) IsDir() bool {
 }
 
 type File struct {
-	fsys   *FS
-	handle io.ReadSeekCloser
-	r      io.Reader
-	Entry  *Entry
+	fsys  *FS
+	sr    *io.SectionReader
+	Entry *Entry
 }
 
 func (f *File) Stat() (fs.FileInfo, error) {
@@ -71,75 +66,26 @@ func (f *File) Stat() (fs.FileInfo, error) {
 }
 
 func (f *File) Read(p []byte) (int, error) {
-	return f.r.Read(p)
-}
-
-func (f *File) relativeOffset(offset int64, whence int) (int64, error) {
-	switch whence {
-	case io.SeekCurrent:
-		return offset, nil
-	case io.SeekStart:
-		if offset > f.Entry.Header.Size {
-			return 0, fmt.Errorf("offset %d greater than file size %d", offset, f.Entry.Header.Size)
-		}
-	case io.SeekEnd:
-		if offset+f.Entry.Header.Size < 0 {
-			return 0, fmt.Errorf("offset %d greater than file size %d", offset, f.Entry.Header.Size)
-		}
-	default:
-		return 0, fmt.Errorf("invalid whence: %d", whence)
-	}
-
-	return f.Entry.Offset + offset, nil
+	return f.sr.Read(p)
 }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {
-	newOffset, err := f.relativeOffset(offset, whence)
-	if err != nil {
-		return 0, err
-	}
-
-	n, err := f.handle.Seek(newOffset, whence)
-	if err != nil {
-		return 0, err
-	}
-
-	return n - f.Entry.Offset, nil
+	return f.sr.Seek(offset, whence)
 }
 
 func (f *File) ReadAt(p []byte, off int64) (int, error) {
-	// If the underlying ReadSeekCloser implements ReaderAt, just use that.
-	if ra, ok := f.handle.(io.ReaderAt); ok {
-		bytesLeft := f.Entry.Header.Size - off
-		if int64(len(p)) > bytesLeft {
-			p = p[:bytesLeft]
-		}
-		return ra.ReadAt(p, f.Entry.Offset+off)
-	}
-
-	if f.handle != nil {
-		// Otherwise do a Seek and ReadFull.
-		if _, err := f.handle.Seek(f.Entry.Offset+off, io.SeekStart); err != nil {
-			return 0, err
-		}
-		f.r = io.LimitReader(f.handle, f.Entry.Header.Size-off)
-	}
-
-	return io.ReadFull(f.r, p)
+	return f.sr.ReadAt(p, off)
 }
 
 func (f *File) Close() error {
-	if f.handle == nil {
-		return nil
-	}
-
-	return f.handle.Close()
+	return nil
 }
 
 type FS struct {
-	open  func() (io.ReadSeekCloser, error)
+	ra    io.ReaderAt
 	files []*Entry
 	index map[string]int
+	dirs  map[string][]fs.DirEntry
 }
 
 func (fsys *FS) Readlink(name string) (string, error) {
@@ -158,8 +104,14 @@ func (fsys *FS) Readlink(name string) (string, error) {
 	return "", fmt.Errorf("Readlink(%q): file is not a link", name)
 }
 
-// Open implements fs.FS.
-func (fsys *FS) Open(name string) (fs.File, error) {
+const maxHops = 64
+
+// open follows symlinks up to [maxHops] times.
+func (fsys *FS) open(name string, hops int) (fs.File, error) {
+	if hops > maxHops {
+		return nil, fmt.Errorf("Open(%q): chased too many (%d) symlinks", name, maxHops)
+	}
+
 	i, ok := fsys.index[name]
 	if !ok {
 		return nil, fs.ErrNotExist
@@ -167,42 +119,33 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 
 	e := fsys.files[i]
 
+	switch e.Header.Typeflag {
+	case tar.TypeSymlink, tar.TypeLink:
+		link := e.Header.Linkname
+		if path.IsAbs(link) {
+			return fsys.open(link, hops+1)
+		}
+
+		return fsys.open(path.Join(e.dir, link), hops+1)
+	}
+
 	f := &File{
 		fsys:  fsys,
 		Entry: e,
 	}
 
-	if e.Header.Size == 0 {
-		f.r = emptyReader
-		return f, nil
-	}
-
-	rc, err := fsys.OpenAt(e.Offset)
-	if err != nil {
-		return nil, err
-	}
-	f.handle = rc
-	f.r = io.LimitReader(rc, e.Header.Size)
+	f.sr = io.NewSectionReader(fsys.ra, e.Offset, e.Header.Size)
 
 	return f, nil
+}
+
+// Open implements fs.FS.
+func (fsys *FS) Open(name string) (fs.File, error) {
+	return fsys.open(name, 0)
 }
 
 func (fsys *FS) Entries() []*Entry {
 	return fsys.files
-}
-
-func (fsys *FS) OpenAt(offset int64) (io.ReadSeekCloser, error) {
-	// TODO: We can use ReadAt to avoid opening the file multiple times.
-	f, err := fsys.open()
-	if err != nil {
-		return nil, err
-	}
-
-	if _, err := f.Seek(offset, io.SeekStart); err != nil {
-		return nil, err
-	}
-
-	return f, nil
 }
 
 type root struct{}
@@ -229,23 +172,12 @@ func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
-	children := []fs.DirEntry{}
-	for _, f := range fsys.files {
-		// This is load bearing.
-		f := f
-
-		if f.dir != name {
-			continue
-		}
-
-		children = append(children, f)
+	dirs, ok := fsys.dirs[name]
+	if !ok {
+		return []fs.DirEntry{}, nil
 	}
 
-	slices.SortFunc(children, func(a, b fs.DirEntry) int {
-		return strings.Compare(a.Name(), b.Name())
-	})
-
-	return children, nil
+	return dirs, nil
 }
 
 type countReader struct {
@@ -259,20 +191,19 @@ func (cr *countReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func New(open func() (io.ReadSeekCloser, error)) (*FS, error) {
+func New(ra io.ReaderAt, size int64) (*FS, error) {
 	fsys := &FS{
-		open:  open,
+		ra:    ra,
 		files: []*Entry{},
 		index: map[string]int{},
+		dirs:  map[string][]fs.DirEntry{},
 	}
+
+	// Number of entries in a given directory, so we know how large of a slice to allocate.
+	dirCount := map[string]int{}
 
 	// TODO: Consider caching this across builds.
-	r, err := open()
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-
+	r := io.NewSectionReader(ra, 0, size)
 	cr := &countReader{bufio.NewReaderSize(r, 1<<20), 0}
 	tr := tar.NewReader(cr)
 	for {
@@ -283,14 +214,46 @@ func New(open func() (io.ReadSeekCloser, error)) (*FS, error) {
 		if err != nil {
 			return nil, err
 		}
+		dir := path.Dir(hdr.Name)
 		fsys.index[hdr.Name] = len(fsys.files)
 		fsys.files = append(fsys.files, &Entry{
 			Header: *hdr,
 			Offset: cr.n,
-			dir:    path.Dir(hdr.Name),
+			dir:    dir,
 			fi:     hdr.FileInfo(),
+		})
+
+		dirCount[dir]++
+	}
+
+	// Pre-generate the results of ReadDir so we don't allocate a ton if fs.WalkDir calls us.
+	// TODO: Consider doing this lazily in a sync.Once the first time we see a ReadDir.
+	for dir, count := range dirCount {
+		fsys.dirs[dir] = make([]fs.DirEntry, 0, count)
+	}
+
+	for _, f := range fsys.files {
+		fsys.dirs[f.dir] = append(fsys.dirs[f.dir], f)
+	}
+
+	for _, files := range fsys.dirs {
+		slices.SortFunc(files, func(a, b fs.DirEntry) int {
+			return cmp.Compare(a.Name(), b.Name())
 		})
 	}
 
 	return fsys, nil
+}
+
+func (fsys *FS) Close() error {
+	if fsys == nil {
+		return nil
+	}
+
+	closer, ok := fsys.ra.(io.Closer)
+	if !ok {
+		return nil
+	}
+
+	return closer.Close()
 }

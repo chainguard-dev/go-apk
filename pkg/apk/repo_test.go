@@ -142,7 +142,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 
-		require.NoError(t, filepath.WalkDir(tmpDir, func(path string, d fs.DirEntry, err error) error {
+		require.NoError(t, filepath.WalkDir(tmpDir, func(path string, _ fs.DirEntry, _ error) error {
 			if filepath.Ext(path) == ".etag" {
 				t.Errorf("found etag file %q, expected none.", path)
 			}

@@ -97,6 +97,15 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 
 	indexScanner := bufio.NewScanner(apkIndexUnpacked)
 
+	// We have seen alpine's community/coq package a provides line with 72KB of data in it.
+	// The default MaxScanTokenSize for bufio.Scanner is 64KB. We allow buf to allocate up
+	// to 1MB but give it a starting buffer size of 16KB (default is 4KB) because we always
+	// end up having to resize, and 16KB should avoid an extra alloc, whereas the 1MB allows
+	// us to alloc enough to handle alpine (and hopefully we never have to revisit this).
+	buf := make([]byte, 16*1024)
+	meg := 1024 * 1024
+	indexScanner.Buffer(buf, meg)
+
 	pkg := &Package{}
 	linenr := 1
 
@@ -182,7 +191,7 @@ func ParsePackageIndex(apkIndexUnpacked io.Reader) ([]*Package, error) {
 		linenr++
 	}
 
-	return packages, nil
+	return packages, indexScanner.Err()
 }
 
 func IndexFromArchive(archive io.ReadCloser) (*APKIndex, error) {
