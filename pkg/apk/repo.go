@@ -309,6 +309,14 @@ func (p *PkgResolver) disqualifyProviders(constraint string, dq map[*RepositoryP
 }
 
 func (p *PkgResolver) conflictingVersion(constraint parsedConstraint, conflict *repositoryPackage) bool {
+	// If the constraint is not a virtual, everything will conflict with it.
+	// TODO: Figure out if this logic is actually equivalent to how apk disqualifies virtual.
+	if constraint.version != "" {
+		return true
+	}
+
+	// From here on, "the same version" really means it's a virtual, but let's keep the diff small until we revisit.
+
 	if conflict.Name == constraint.name {
 		return conflict.Version != constraint.version
 	}
