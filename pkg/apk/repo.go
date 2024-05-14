@@ -327,6 +327,10 @@ func (p *PkgResolver) disqualifyConflicts(pkg *RepositoryPackage, dq map[*Reposi
 				continue
 			}
 
+			if pkg.ProviderPriority > conflict.ProviderPriority {
+				continue
+			}
+
 			p.disqualify(dq, conflict.RepositoryPackage, pkg.Filename()+" already provides "+name)
 		}
 	}
