@@ -360,7 +360,8 @@ func testGetPackagesAndIndex() ([]*RepositoryPackage, []*RepositoryWithIndex) {
 			{Name: "package5", Version: "1.5.1"},
 			{Name: "package5", Version: "2.0.0"},
 			{Name: "package5-special", Version: "1.2.0", Provides: []string{"package5"}},
-			{Name: "package5-conflict", Version: "1.2.0", Provides: []string{"package5"}},
+			{Name: "package5-conflict", Version: "1.2.0", Provides: []string{"package5=1.2.0"}},
+			{Name: "package5-noconflict", Version: "1.2.0", Provides: []string{"package5"}},
 			{Name: "package6", Version: "1.5.1"},
 			{Name: "package6", Version: "2.0.0", Dependencies: []string{"package6", "package5"}},
 			{Name: "package7", Version: "1"},
@@ -456,6 +457,16 @@ func TestGetPackagesWithDependences(t *testing.T) {
 				require.Equal(t, version, pkg.Version)
 			}
 		})
+	})
+	t.Run("conflicting same provides", func(t *testing.T) {
+		// Test that we can't install both package5-special and package5-conflict
+		// because they both provide package5.
+		_, index := testGetPackagesAndIndex()
+		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
+		names := []string{"package5-special", "package5-noconflict", "abc9"}
+		sort.Strings(names)
+		_, _, err := resolver.GetPackagesWithDependencies(context.Background(), names)
+		require.NoError(t, err, "provided package should not conflict")
 	})
 	t.Run("conflicting provides", func(t *testing.T) {
 		// Test that we can't install both package5-special and package5-conflict
@@ -619,7 +630,7 @@ func TestResolvePackage(t *testing.T) {
 		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
 		pkgs, err := resolver.ResolvePackage("package5", map[*RepositoryPackage]string{})
 		require.NoError(t, err)
-		require.Len(t, pkgs, 6)
+		require.Len(t, pkgs, 7)
 	})
 	t.Run("specific version", func(t *testing.T) {
 		// getPackageDependencies does not get the same dependencies twice.
@@ -645,7 +656,7 @@ func TestResolvePackage(t *testing.T) {
 		resolver := NewPkgResolver(context.Background(), testNamedRepositoryFromIndexes(index))
 		pkgs, err := resolver.ResolvePackage("package5>1.0.0", map[*RepositoryPackage]string{})
 		require.NoError(t, err)
-		require.Len(t, pkgs, 5)
+		require.Len(t, pkgs, 6)
 		// first version should be highest match
 		require.Equal(t, "2.0.0", pkgs[0].Version)
 	})
