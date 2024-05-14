@@ -308,11 +308,34 @@ func (p *PkgResolver) disqualifyProviders(constraint string, dq map[*RepositoryP
 	}
 }
 
+func (p *PkgResolver) conflictingVersion(constraint parsedConstraint, conflict *repositoryPackage) bool {
+	if conflict.Name == constraint.name {
+		return conflict.Version != constraint.version
+	}
+
+	for _, confProv := range conflict.Provides {
+		confConstraint := p.resolvePackageNameVersionPin(confProv)
+		if confConstraint.name != constraint.name {
+			// Not the constraint we're looking for.
+			continue
+		}
+
+		if confConstraint.version == constraint.version {
+			// If the versions are the same, they shouldn't conflict.
+			return false
+		}
+
+		return true
+	}
+
+	panic("conflictingVersion called with a package that does not provide the constraint")
+}
+
 // Disqualify anything that conflicts with the given pkg.
 func (p *PkgResolver) disqualifyConflicts(pkg *RepositoryPackage, dq map[*RepositoryPackage]string) {
 	for _, prov := range pkg.Provides {
-		name := p.resolvePackageNameVersionPin(prov).name
-		providers, ok := p.nameMap[name]
+		constraint := p.resolvePackageNameVersionPin(prov)
+		providers, ok := p.nameMap[constraint.name]
 		if !ok {
 			continue
 		}
@@ -327,7 +350,12 @@ func (p *PkgResolver) disqualifyConflicts(pkg *RepositoryPackage, dq map[*Reposi
 				continue
 			}
 
-			p.disqualify(dq, conflict.RepositoryPackage, pkg.Filename()+" already provides "+name)
+			if !p.conflictingVersion(constraint, conflict) {
+				// The conflicting package provides the given name but the version is the same, so no conflict.
+				continue
+			}
+
+			p.disqualify(dq, conflict.RepositoryPackage, pkg.Filename()+" already provides "+constraint.name)
 		}
 	}
 }
