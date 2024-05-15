@@ -381,7 +381,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 
 			var asURL *url.URL
 			var err error
-			if strings.HasPrefix(element, "https://") {
+			if strings.HasPrefix(element, "https://") || strings.HasPrefix(element, "s3://") {
 				asURL, err = url.Parse(element)
 			} else {
 				// Attempt to parse non-https elements into URI's so they are translated into
@@ -398,6 +398,15 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 				data, err = os.ReadFile(element)
 				if err != nil {
 					return fmt.Errorf("failed to read apk key: %w", err)
+				}
+			case "s3": //nolint:goconst
+				body, err := fetchS3(ctx, asURL)
+				if err != nil {
+					return fmt.Errorf("failed to fetch object from s3: %w", err)
+				}
+				data, err = io.ReadAll(body)
+				if err != nil {
+					return fmt.Errorf("failed to read apk key from s3: %w", err)
 				}
 			case "https": //nolint:goconst
 				client := a.client
@@ -1007,6 +1016,8 @@ func packageAsURI(pkg InstallablePackage) (uri.URI, error) {
 
 	if strings.HasPrefix(u, "https://") {
 		return uri.Parse(u)
+	} else if strings.HasPrefix(u, "s3://") {
+		return uri.URI(u), nil
 	}
 
 	return uri.New(u), nil
@@ -1045,6 +1056,12 @@ func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.Read
 			return nil, fmt.Errorf("failed to read repository package apk %s: %w", u, err)
 		}
 		return f, nil
+	case "s3":
+		body, err := fetchS3(ctx, asURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch object from s3: %w", err)
+		}
+		return body, nil
 	case "https":
 		client := a.client
 		if client == nil {
