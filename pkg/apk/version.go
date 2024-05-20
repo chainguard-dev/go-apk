@@ -37,7 +37,7 @@ import (
 
 var (
 	versionRegex     = regexp.MustCompile(`^([0-9]+)((\.[0-9]+)*)([a-z]?)((_alpha|_beta|_pre|_rc)([0-9]*))?((_cvs|_svn|_git|_hg|_p)([0-9]*))?((-r)([0-9]+))?$`)
-	packageNameRegex = regexp.MustCompile(`^([^@=><~]+)(([=><~]+)([^@]+))?(@([a-zA-Z0-9]+))?$`)
+	packageNameRegex = regexp.MustCompile(`^(?P<name>[^@=><~]+)(?:(?P<dep>[=><~]+)(?P<version>[^@]+))?(?:@(?P<pin>[\w-]+))?$`)
 )
 
 func init() {
@@ -78,11 +78,10 @@ type packageVersion struct {
 }
 
 func parseVersion(version string) (packageVersion, error) {
-	parts := versionRegex.FindAllStringSubmatch(version, -1)
-	if len(parts) == 0 {
+	actuals := versionRegex.FindStringSubmatch(version)
+	if actuals == nil {
 		return packageVersion{}, fmt.Errorf("invalid version %s, could not parse", version)
 	}
-	actuals := parts[0]
 	numbers := make([]int, 0, 10)
 	if len(actuals) != 14 {
 		return packageVersion{}, fmt.Errorf("invalid version %s, could not find enough components", version)
@@ -371,8 +370,8 @@ type parsedConstraint struct {
 }
 
 func resolvePackageNameVersionPin(pkgName string) parsedConstraint {
-	parts := packageNameRegex.FindAllStringSubmatch(pkgName, -1)
-	if len(parts) == 0 || len(parts[0]) < 2 {
+	parts := packageNameRegex.FindStringSubmatch(pkgName)
+	if parts == nil { // no match
 		return parsedConstraint{
 			name: pkgName,
 			dep:  versionAny,
@@ -380,16 +379,15 @@ func resolvePackageNameVersionPin(pkgName string) parsedConstraint {
 	}
 	// layout: [full match, name, =version, =|>|<, version, @pin, pin]
 	p := parsedConstraint{
-		name:    parts[0][1],
-		version: parts[0][4],
-		pin:     parts[0][6],
+		name:    parts[packageNameRegex.SubexpIndex("name")],
+		version: parts[packageNameRegex.SubexpIndex("version")],
+		pin:     parts[packageNameRegex.SubexpIndex("pin")],
 		dep:     versionAny,
 	}
 
-	matcher := parts[0][3]
-	if matcher != "" {
+	if dep := parts[packageNameRegex.SubexpIndex("dep")]; dep != "" {
 		// we have an equal
-		switch matcher {
+		switch dep {
 		case "=":
 			p.dep = versionEqual
 		case ">":

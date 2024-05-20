@@ -925,6 +925,8 @@ func TestResolverPackageNameVersionPin(t *testing.T) {
 		{"name<=1.2.3", "name", "1.2.3", versionLessEqual, ""},
 		{"name@edge=1.2.3", "name@edge=1.2.3", "", versionAny, ""}, // wrong order, so just returns the whole thing
 		{"name=1.2.3@community", "name", "1.2.3", versionEqual, "community"},
+		{"name>1.2.3@foo-bar", "name", "1.2.3", versionGreater, "foo-bar"},
+		{"name~1.2.3@foo_bar", "name", "1.2.3", versionTilde, "foo_bar"},
 	}
 
 	for _, tt := range tests {
