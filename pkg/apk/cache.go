@@ -305,7 +305,7 @@ func (t *cacheTransport) retrieveAndSaveFile(request *http.Request, cp cachePlac
 }
 
 func cacheDirForPackage(root string, pkg InstallablePackage) (string, error) {
-	u, err := packageAsURL(pkg)
+	u, err := url.Parse(pkg.URL())
 	if err != nil {
 		return "", err
 	}
