@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,20 +30,22 @@ import (
 
 	"github.com/psanford/memfs"
 
+	"github.com/chainguard-dev/clog"
 	"github.com/chainguard-dev/go-apk/pkg/tarball"
 )
 
 func SignIndex(ctx context.Context, signingKey string, indexFile string) error {
+	log := clog.FromContext(ctx)
 	is, err := indexIsAlreadySigned(indexFile)
 	if err != nil {
 		return err
 	}
 	if is {
-		log.Printf("index %s is already signed, doing nothing", indexFile)
+		log.Infof("index %s is already signed, doing nothing", indexFile)
 		return nil
 	}
 
-	log.Printf("signing index %s with key %s", indexFile, signingKey)
+	log.Infof("signing index %s with key %s", indexFile, signingKey)
 
 	indexData, indexDigest, err := ReadAndHashIndexFile(indexFile)
 	if err != nil {
@@ -56,7 +57,7 @@ func SignIndex(ctx context.Context, signingKey string, indexFile string) error {
 		return fmt.Errorf("unable to sign index: %w", err)
 	}
 
-	log.Printf("appending signature to index %s", indexFile)
+	log.Infof("appending signature to index %s", indexFile)
 
 	sigFS := memfs.New()
 	if err := sigFS.WriteFile(fmt.Sprintf(".SIGN.RSA.%s.pub", filepath.Base(signingKey)), sigData, 0644); err != nil {
@@ -74,7 +75,7 @@ func SignIndex(ctx context.Context, signingKey string, indexFile string) error {
 		return fmt.Errorf("unable to build tarball context: %w", err)
 	}
 
-	log.Printf("writing signed index to %s", indexFile)
+	log.Infof("writing signed index to %s", indexFile)
 
 	var sigBuffer bytes.Buffer
 	if err := multitarctx.WriteTargz(ctx, &sigBuffer, sigFS, sigFS); err != nil {
@@ -95,7 +96,7 @@ func SignIndex(ctx context.Context, signingKey string, indexFile string) error {
 		return fmt.Errorf("unable to write index data: %w", err)
 	}
 
-	log.Printf("signed index %s with key %s", indexFile, signingKey)
+	log.Infof("signed index %s with key %s", indexFile, signingKey)
 
 	return nil
 }
