@@ -72,7 +72,7 @@ func TestParseVersion(t *testing.T) {
 			{"1.1.1-r29", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 29}},
 		}
 		for _, tt := range tests {
-			actual, err := Parse(tt.version)
+			actual, err := ParseVersion(tt.version)
 			require.NoError(t, err, "%q unexpected error", tt.version)
 			require.Equal(t, tt.expected, actual, "%q expected %v, got %v", tt.version, tt.expected, actual)
 		}
@@ -87,7 +87,7 @@ func TestParseVersion(t *testing.T) {
 			"1.1.1-rQ",
 		}
 		for _, version := range tests {
-			_, err := Parse(version)
+			_, err := ParseVersion(version)
 			require.Error(t, err, "%q mismatched error", version)
 		}
 	})
@@ -836,13 +836,13 @@ func TestCompareVersion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("compare %s %s %s", tt.versionA, tt.expected, tt.versionB), func(t *testing.T) {
-			verA, err := Parse(tt.versionA)
+			verA, err := ParseVersion(tt.versionA)
 			require.NoError(t, err, "%q unexpected error", err)
 
-			verB, err := Parse(tt.versionB)
+			verB, err := ParseVersion(tt.versionB)
 			require.NoError(t, err, "%q unexpected error", err)
 
-			result := Compare(verA, verB)
+			result := CompareVersions(verA, verB)
 			require.Equalf(t, tt.expected, result, "comparison (%s %s %s) must be correct", tt.versionA, tt.expected, tt.versionB)
 		})
 	}

@@ -793,7 +793,7 @@ func (p *PkgResolver) parseVersion(version string) (Version, error) {
 		return pkg, nil
 	}
 
-	parsed, err := Parse(version)
+	parsed, err := ParseVersion(version)
 	if err != nil {
 		return parsed, err
 	}
@@ -906,7 +906,7 @@ func (p *PkgResolver) comparePackages(compare *RepositoryPackage, name string, e
 			// If j fails to parse, prefer i.
 			return -1
 		}
-		versions := Compare(iVersion, jVersion)
+		versions := CompareVersions(iVersion, jVersion)
 		if versions != equal {
 			return -1 * int(versions)
 		}
@@ -921,7 +921,7 @@ func (p *PkgResolver) comparePackages(compare *RepositoryPackage, name string, e
 				// If j fails to parse, prefer i.
 				return -1
 			}
-			versions := Compare(iVersion, jVersion)
+			versions := CompareVersions(iVersion, jVersion)
 			if versions != equal {
 				return -1 * int(versions)
 			}

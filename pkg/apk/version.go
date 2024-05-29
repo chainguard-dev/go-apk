@@ -77,8 +77,8 @@ type Version struct {
 	revision         int
 }
 
-// Parse parses a version string into a Version struct.
-func Parse(version string) (Version, error) {
+// ParseVersion parses a version string into a Version struct.
+func ParseVersion(version string) (Version, error) {
 	parts := versionRegex.FindAllStringSubmatch(version, -1)
 	if len(parts) == 0 {
 		return Version{}, fmt.Errorf("invalid version %s, could not parse", version)
@@ -204,8 +204,8 @@ func (vc versionCompare) String() string {
 	}
 }
 
-// Compare compares versions based on https://dev.gentoo.org/~ulm/pms/head/pms.html#x1-250003.2
-func Compare(actual, required Version) versionCompare {
+// CompareVersions compares versions based on https://dev.gentoo.org/~ulm/pms/head/pms.html#x1-250003.2
+func CompareVersions(actual, required Version) versionCompare {
 	for i := 0; i < len(actual.numbers) && i < len(required.numbers); i++ {
 		if actual.numbers[i] > required.numbers[i] {
 			return greater
@@ -345,7 +345,7 @@ func (v versionDependency) satisfies(actualVersion, requiredVersion Version) boo
 	if v == versionTilde {
 		return includesVersion(actualVersion, requiredVersion)
 	}
-	c := Compare(actualVersion, requiredVersion)
+	c := CompareVersions(actualVersion, requiredVersion)
 	switch v {
 	case versionAny:
 		return true
