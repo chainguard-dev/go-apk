@@ -17,13 +17,9 @@ package version
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/chainguard-dev/go-apk/pkg/apk"
-	"golang.org/x/exp/maps"
 )
 
 // versionRegex how to parse versions.
@@ -274,39 +270,4 @@ func Compare(actual, required Version) int {
 		return less
 	}
 	return equal
-}
-
-// FilterLatest filters a list of packages to only include the latest version of each package.
-func FilterLatest(packages []*apk.Package) []*apk.Package {
-	// by package
-	highest := map[string]*apk.Package{}
-
-	for _, pkg := range packages {
-		got, err := Parse(pkg.Version)
-		if err != nil {
-			// TODO: We should really fail here.
-			log.Printf("parsing %q: %v", pkg.Filename(), err)
-			continue
-		}
-
-		have, ok := highest[pkg.Name]
-		if !ok {
-			highest[pkg.Name] = pkg
-			continue
-		}
-
-		// TODO: We re-parse this for no reason.
-		parsed, err := Parse(have.Version)
-		if err != nil {
-			// TODO: We should really fail here.
-			log.Printf("parsing %q: %v", have.Version, err)
-			continue
-		}
-
-		if Compare(*got, *parsed) > 0 {
-			highest[pkg.Name] = pkg
-		}
-	}
-
-	return maps.Values(highest)
 }
