@@ -99,7 +99,8 @@ func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, 
 
 	v, ok := i.indexes.Load(u)
 	if !ok {
-		panic(fmt.Errorf("did not see index %q after writing it", u))
+		asURL, _ := url.Parse(u)
+		panic(fmt.Errorf("did not see index %q after writing it", asURL.Redacted()))
 	}
 	result := v.(indexResult)
 
@@ -145,7 +146,8 @@ func GetRepositoryIndexes(ctx context.Context, repos []string, keys map[string][
 
 		index, err := globalIndexCache.get(ctx, u, keys, arch, opts)
 		if err != nil {
-			return nil, fmt.Errorf("reading index %s: %w", u, err)
+			asURL, _ := url.Parse(u)
+			return nil, fmt.Errorf("reading index %s: %w", asURL.Redacted(), err)
 		}
 
 		// Can happen for fs.ErrNotExist in file scheme, we just ignore it.
@@ -196,7 +198,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 		b, err = os.ReadFile(u)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
-				return nil, fmt.Errorf("failed to read repository %s: %w", u, err)
+				return nil, fmt.Errorf("failed to read repository %s: %w", asURL.Redacted(), err)
 			}
 			return nil, nil
 		}
@@ -217,20 +219,20 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 		rrt := newRangeRetryTransport(ctx, client)
 		res, err := rrt.RoundTrip(req)
 		if err != nil {
-			return nil, fmt.Errorf("unable to get repository index at %s: %w", u, err)
+			return nil, fmt.Errorf("unable to get repository index at %s: %w", asURL.Redacted(), err)
 		}
 		switch res.StatusCode {
 		case http.StatusOK:
 			// this is fine
 		case http.StatusNotFound:
-			return nil, fmt.Errorf("repository index not found for architecture %s at %s", arch, u)
+			return nil, fmt.Errorf("repository index not found for architecture %s at %s", arch, asURL.Redacted())
 		default:
-			return nil, fmt.Errorf("unexpected status code %d when getting repository index for architecture %s at %s", res.StatusCode, arch, u)
+			return nil, fmt.Errorf("unexpected status code %d when getting repository index for architecture %s at %s", res.StatusCode, arch, asURL.Redacted())
 		}
 		defer res.Body.Close()
 		buf := bytes.NewBuffer(nil)
 		if _, err := io.Copy(buf, res.Body); err != nil {
-			return nil, fmt.Errorf("unable to read repository index at %s: %w", u, err)
+			return nil, fmt.Errorf("unable to read repository index at %s: %w", asURL.Redacted(), err)
 		}
 		b = buf.Bytes()
 	default:
@@ -306,7 +308,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 	// with a valid signature, convert it to an ApkIndex
 	index, err := IndexFromArchive(io.NopCloser(bytes.NewReader(b)))
 	if err != nil {
-		return nil, fmt.Errorf("unable to read convert repository index bytes to index struct at %s: %w", u, err)
+		return nil, fmt.Errorf("unable to read convert repository index bytes to index struct at %s: %w", asURL.Redacted(), err)
 	}
 
 	return index, err
