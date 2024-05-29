@@ -25,8 +25,6 @@ import (
 	"strings"
 
 	"github.com/chainguard-dev/clog"
-	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/go-retryablehttp"
 	"go.opentelemetry.io/otel"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -175,11 +173,6 @@ func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) (
 		keys[d.Name()] = b
 	}
 	httpClient := a.client
-	if httpClient == nil {
-		rhttp := retryablehttp.NewClient()
-		rhttp.Logger = hclog.Default()
-		httpClient = rhttp.StandardClient()
-	}
 	if a.cache != nil {
 		httpClient = a.cache.client(httpClient, true)
 	}

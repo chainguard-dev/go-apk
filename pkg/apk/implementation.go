@@ -48,8 +48,6 @@ import (
 
 	"github.com/chainguard-dev/go-apk/internal/tarfs"
 	apkfs "github.com/chainguard-dev/go-apk/pkg/fs"
-	"github.com/hashicorp/go-hclog"
-	retryablehttp "github.com/hashicorp/go-retryablehttp"
 )
 
 // This is terrible but simpler than plumbing around a cache for now.
@@ -79,8 +77,6 @@ func New(options ...Option) (*APK, error) {
 			return nil, err
 		}
 	}
-	rhttp := retryablehttp.NewClient()
-	rhttp.Logger = hclog.Default()
 
 	if opt.fs == nil {
 		// This is expensive so we only want to do it if we aren't passed WithFS.
@@ -88,7 +84,7 @@ func New(options ...Option) (*APK, error) {
 	}
 
 	return &APK{
-		client:             rhttp.StandardClient(),
+		client:             http.DefaultClient,
 		fs:                 opt.fs,
 		arch:               opt.arch,
 		executor:           opt.executor,
@@ -401,9 +397,6 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 				}
 			case "https": //nolint:goconst
 				client := a.client
-				if client == nil {
-					client = retryablehttp.NewClient().StandardClient()
-				}
 				if a.cache != nil {
 					client = a.cache.client(client, true)
 				}
@@ -717,9 +710,6 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 
 	u := alpineReleasesURL
 	client := a.client
-	if client == nil {
-		client = retryablehttp.NewClient().StandardClient()
-	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err
@@ -1047,9 +1037,6 @@ func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.Read
 		return f, nil
 	case "https":
 		client := a.client
-		if client == nil {
-			client = retryablehttp.NewClient().StandardClient()
-		}
 		if a.cache != nil {
 			client = a.cache.client(client, false)
 		}

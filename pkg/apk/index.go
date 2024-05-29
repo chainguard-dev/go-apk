@@ -33,8 +33,6 @@ import (
 	"github.com/klauspost/compress/gzip"
 
 	sign "github.com/chainguard-dev/go-apk/pkg/signature"
-	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/go-retryablehttp"
 	"go.lsp.dev/uri"
 	"go.opentelemetry.io/otel"
 )
@@ -204,11 +202,6 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 		}
 	case "https":
 		client := opts.httpClient
-		if client == nil {
-			rhttp := retryablehttp.NewClient()
-			rhttp.Logger = hclog.Default()
-			client = rhttp.StandardClient()
-		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, asURL.String(), nil)
 		if err != nil {
 			return nil, err
