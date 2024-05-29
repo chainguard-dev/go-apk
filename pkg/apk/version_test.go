@@ -96,7 +96,7 @@ func TestParseVersion(t *testing.T) {
 func TestCompareVersion(t *testing.T) {
 	tests := []struct {
 		versionA string
-		expected versionCompare
+		expected int
 		versionB string
 	}{
 		{"2.34", greater, "0.1.0_alpha"},
@@ -835,7 +835,17 @@ func TestCompareVersion(t *testing.T) {
 		{"6.4_p20231125-r0", greater, "6.4-r2"},
 	}
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("compare %s %s %s", tt.versionA, tt.expected, tt.versionB), func(t *testing.T) {
+		var exp string
+		switch tt.expected {
+		case less:
+			exp = "<"
+		case equal:
+			exp = "="
+		case greater:
+			exp = ">"
+		}
+
+		t.Run(fmt.Sprintf("compare %s %s %s", tt.versionA, exp, tt.versionB), func(t *testing.T) {
 			verA, err := ParseVersion(tt.versionA)
 			require.NoError(t, err, "%q unexpected error", err)
 

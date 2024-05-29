@@ -183,29 +183,14 @@ func ParseVersion(version string) (Version, error) {
 	}, nil
 }
 
-type versionCompare int
-
 const (
-	greater versionCompare = 1
-	equal   versionCompare = 0
-	less    versionCompare = -1
+	greater = 1
+	equal   = 0
+	less    = -1
 )
 
-func (vc versionCompare) String() string {
-	switch vc {
-	case greater:
-		return ">"
-	case equal:
-		return "="
-	case less:
-		return "<"
-	default:
-		return "???"
-	}
-}
-
 // CompareVersions compares versions based on https://dev.gentoo.org/~ulm/pms/head/pms.html#x1-250003.2
-func CompareVersions(actual, required Version) versionCompare {
+func CompareVersions(actual, required Version) int {
 	for i := 0; i < len(actual.numbers) && i < len(required.numbers); i++ {
 		if actual.numbers[i] > required.numbers[i] {
 			return greater

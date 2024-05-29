@@ -908,7 +908,7 @@ func (p *PkgResolver) comparePackages(compare *RepositoryPackage, name string, e
 		}
 		versions := CompareVersions(iVersion, jVersion)
 		if versions != equal {
-			return -1 * int(versions)
+			return -1 * versions
 		}
 		// if versions are equal, they might not be the same as the package versions
 		if iVersionStr != a.Version || jVersionStr != b.Version {
@@ -923,7 +923,7 @@ func (p *PkgResolver) comparePackages(compare *RepositoryPackage, name string, e
 			}
 			versions := CompareVersions(iVersion, jVersion)
 			if versions != equal {
-				return -1 * int(versions)
+				return -1 * versions
 			}
 		}
 		// if versions are equal, compare names
