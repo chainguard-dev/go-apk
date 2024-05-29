@@ -193,7 +193,7 @@ type PkgResolver struct {
 	nameMap      map[string][]*repositoryPackage
 	installIfMap map[string][]*repositoryPackage // contains any package that should be installed if the named package is installed
 
-	parsedVersions map[string]packageVersion
+	parsedVersions map[string]Version
 	depForVersion  map[string]parsedConstraint
 }
 
@@ -211,7 +211,7 @@ func NewPkgResolver(_ context.Context, indexes []NamedIndex) *PkgResolver {
 	)
 	p := &PkgResolver{
 		indexes:        indexes,
-		parsedVersions: map[string]packageVersion{},
+		parsedVersions: map[string]Version{},
 		depForVersion:  map[string]parsedConstraint{},
 	}
 
@@ -695,7 +695,7 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 
 			if allowSelfFulfill && pkg.Name == name {
 				var (
-					actualVersion, requiredVersion packageVersion
+					actualVersion, requiredVersion Version
 					err1, err2                     error
 				)
 				actualVersion, err1 = p.parseVersion(pkg.Version)
@@ -787,13 +787,13 @@ func (p *PkgResolver) getPackageDependencies(pkg *RepositoryPackage, allowPin st
 	return dependencies, conflicts, nil
 }
 
-func (p *PkgResolver) parseVersion(version string) (packageVersion, error) {
+func (p *PkgResolver) parseVersion(version string) (Version, error) {
 	pkg, ok := p.parsedVersions[version]
 	if ok {
 		return pkg, nil
 	}
 
-	parsed, err := parseVersion(version)
+	parsed, err := ParseVersion(version)
 	if err != nil {
 		return parsed, err
 	}
@@ -906,9 +906,9 @@ func (p *PkgResolver) comparePackages(compare *RepositoryPackage, name string, e
 			// If j fails to parse, prefer i.
 			return -1
 		}
-		versions := compareVersions(iVersion, jVersion)
+		versions := CompareVersions(iVersion, jVersion)
 		if versions != equal {
-			return -1 * int(versions)
+			return -1 * versions
 		}
 		// if versions are equal, they might not be the same as the package versions
 		if iVersionStr != a.Version || jVersionStr != b.Version {
@@ -921,9 +921,9 @@ func (p *PkgResolver) comparePackages(compare *RepositoryPackage, name string, e
 				// If j fails to parse, prefer i.
 				return -1
 			}
-			versions := compareVersions(iVersion, jVersion)
+			versions := CompareVersions(iVersion, jVersion)
 			if versions != equal {
-				return -1 * int(versions)
+				return -1 * versions
 			}
 		}
 		// if versions are equal, compare names

@@ -26,53 +26,53 @@ func TestParseVersion(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		tests := []struct {
 			version  string
-			expected packageVersion
+			expected Version
 		}{
 			// various legitimate ones
-			{"1", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1", packageVersion{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1.1", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1a", packageVersion{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1a", packageVersion{numbers: []int{1, 1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1.1a", packageVersion{numbers: []int{1, 1, 1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1_alpha", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1_beta", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierBeta, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1_alpha1", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1_alpha2", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1_alpha", packageVersion{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1.1_alpha", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1_alpha1", packageVersion{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1a_alpha1", packageVersion{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1a_alpha2", packageVersion{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1b_alpha", packageVersion{numbers: []int{1, 1}, letter: 'b', preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1.1c_alpha", packageVersion{numbers: []int{1, 1, 1}, letter: 'c', preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1r_alpha1", packageVersion{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, letter: 'r', postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1.1.1s_alpha2", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, letter: 's', postSuffix: packageVersionPostModifierNone, revision: 0}},
-			{"1-r2", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1-r2", packageVersion{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1.1-r2", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1a-r2", packageVersion{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1a-r2", packageVersion{numbers: []int{1, 1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1.1a-r2", packageVersion{numbers: []int{1, 1, 1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1_alpha-r2", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1_beta-r2", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierBeta, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1_alpha1-r2", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1_alpha2-r2", packageVersion{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1_alpha-r2", packageVersion{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1.1_alpha-r2", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1_alpha1-r2", packageVersion{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1.1_alpha2-r2", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1a_alpha1-r2", packageVersion{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1a_alpha2-r2", packageVersion{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1b_alpha-r2", packageVersion{numbers: []int{1, 1}, letter: 'b', preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1.1c_alpha-r2", packageVersion{numbers: []int{1, 1, 1}, letter: 'c', preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1r_alpha1-r2", packageVersion{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, letter: 'r', postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1.1s_alpha2-r2", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, letter: 's', postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1.1-r2", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
-			{"1.1.1-r29", packageVersion{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 29}},
+			{"1", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1", Version{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1.1", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1a", Version{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1a", Version{numbers: []int{1, 1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1.1a", Version{numbers: []int{1, 1, 1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1_alpha", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1_beta", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierBeta, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1_alpha1", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1_alpha2", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1_alpha", Version{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1.1_alpha", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1_alpha1", Version{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1a_alpha1", Version{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1a_alpha2", Version{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1b_alpha", Version{numbers: []int{1, 1}, letter: 'b', preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1.1c_alpha", Version{numbers: []int{1, 1, 1}, letter: 'c', preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1r_alpha1", Version{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, letter: 'r', postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1.1.1s_alpha2", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, letter: 's', postSuffix: packageVersionPostModifierNone, revision: 0}},
+			{"1-r2", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1-r2", Version{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1.1-r2", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1a-r2", Version{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1a-r2", Version{numbers: []int{1, 1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1.1a-r2", Version{numbers: []int{1, 1, 1}, letter: 'a', preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1_alpha-r2", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1_beta-r2", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierBeta, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1_alpha1-r2", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1_alpha2-r2", Version{numbers: []int{1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1_alpha-r2", Version{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1.1_alpha-r2", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1_alpha1-r2", Version{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1.1_alpha2-r2", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1a_alpha1-r2", Version{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1a_alpha2-r2", Version{numbers: []int{1}, letter: 'a', preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1b_alpha-r2", Version{numbers: []int{1, 1}, letter: 'b', preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1.1c_alpha-r2", Version{numbers: []int{1, 1, 1}, letter: 'c', preSuffix: packageVersionPreModifierAlpha, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1r_alpha1-r2", Version{numbers: []int{1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 1, letter: 'r', postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1.1s_alpha2-r2", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierAlpha, preSuffixNumber: 2, letter: 's', postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1.1-r2", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 2}},
+			{"1.1.1-r29", Version{numbers: []int{1, 1, 1}, preSuffix: packageVersionPreModifierNone, postSuffix: packageVersionPostModifierNone, revision: 29}},
 		}
 		for _, tt := range tests {
-			actual, err := parseVersion(tt.version)
+			actual, err := ParseVersion(tt.version)
 			require.NoError(t, err, "%q unexpected error", tt.version)
 			require.Equal(t, tt.expected, actual, "%q expected %v, got %v", tt.version, tt.expected, actual)
 		}
@@ -87,7 +87,7 @@ func TestParseVersion(t *testing.T) {
 			"1.1.1-rQ",
 		}
 		for _, version := range tests {
-			_, err := parseVersion(version)
+			_, err := ParseVersion(version)
 			require.Error(t, err, "%q mismatched error", version)
 		}
 	})
@@ -96,7 +96,7 @@ func TestParseVersion(t *testing.T) {
 func TestCompareVersion(t *testing.T) {
 	tests := []struct {
 		versionA string
-		expected versionCompare
+		expected int
 		versionB string
 	}{
 		{"2.34", greater, "0.1.0_alpha"},
@@ -835,14 +835,24 @@ func TestCompareVersion(t *testing.T) {
 		{"6.4_p20231125-r0", greater, "6.4-r2"},
 	}
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("compare %s %s %s", tt.versionA, tt.expected, tt.versionB), func(t *testing.T) {
-			verA, err := parseVersion(tt.versionA)
+		var exp string
+		switch tt.expected {
+		case less:
+			exp = "<"
+		case equal:
+			exp = "="
+		case greater:
+			exp = ">"
+		}
+
+		t.Run(fmt.Sprintf("compare %s %s %s", tt.versionA, exp, tt.versionB), func(t *testing.T) {
+			verA, err := ParseVersion(tt.versionA)
 			require.NoError(t, err, "%q unexpected error", err)
 
-			verB, err := parseVersion(tt.versionB)
+			verB, err := ParseVersion(tt.versionB)
 			require.NoError(t, err, "%q unexpected error", err)
 
-			result := compareVersions(verA, verB)
+			result := CompareVersions(verA, verB)
 			require.Equalf(t, tt.expected, result, "comparison (%s %s %s) must be correct", tt.versionA, tt.expected, tt.versionB)
 		})
 	}

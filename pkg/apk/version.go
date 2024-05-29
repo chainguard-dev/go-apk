@@ -67,7 +67,7 @@ const (
 	packageVersionPostModifierMax  packageVersionPostModifier = 1000
 )
 
-type packageVersion struct {
+type Version struct {
 	numbers          []int
 	letter           rune
 	preSuffix        packageVersionPreModifier
@@ -77,21 +77,22 @@ type packageVersion struct {
 	revision         int
 }
 
-func parseVersion(version string) (packageVersion, error) {
+// ParseVersion parses a version string into a Version struct.
+func ParseVersion(version string) (Version, error) {
 	parts := versionRegex.FindAllStringSubmatch(version, -1)
 	if len(parts) == 0 {
-		return packageVersion{}, fmt.Errorf("invalid version %s, could not parse", version)
+		return Version{}, fmt.Errorf("invalid version %s, could not parse", version)
 	}
 	actuals := parts[0]
 	numbers := make([]int, 0, 10)
 	if len(actuals) != 14 {
-		return packageVersion{}, fmt.Errorf("invalid version %s, could not find enough components", version)
+		return Version{}, fmt.Errorf("invalid version %s, could not find enough components", version)
 	}
 
 	// get the first version number
 	num, err := strconv.Atoi(actuals[1])
 	if err != nil {
-		return packageVersion{}, fmt.Errorf("invalid version %s, first part is not number: %w", version, err)
+		return Version{}, fmt.Errorf("invalid version %s, first part is not number: %w", version, err)
 	}
 	numbers = append(numbers, num)
 
@@ -104,7 +105,7 @@ func parseVersion(version string) (packageVersion, error) {
 			}
 			num, err := strconv.Atoi(s)
 			if err != nil {
-				return packageVersion{}, fmt.Errorf("invalid version %s, part %d is not number: %w", version, i, err)
+				return Version{}, fmt.Errorf("invalid version %s, part %d is not number: %w", version, i, err)
 			}
 			numbers = append(numbers, num)
 		}
@@ -126,13 +127,13 @@ func parseVersion(version string) (packageVersion, error) {
 	case "":
 		preSuffix = packageVersionPreModifierNone
 	default:
-		return packageVersion{}, fmt.Errorf("invalid version %s, pre-suffix %s is not valid", version, actuals[6])
+		return Version{}, fmt.Errorf("invalid version %s, pre-suffix %s is not valid", version, actuals[6])
 	}
 	var preSuffixNumber int
 	if actuals[7] != "" {
 		num, err := strconv.Atoi(actuals[7])
 		if err != nil {
-			return packageVersion{}, fmt.Errorf("invalid version %s, suffix %s number %s is not number: %w", version, actuals[6], actuals[7], err)
+			return Version{}, fmt.Errorf("invalid version %s, suffix %s number %s is not number: %w", version, actuals[6], actuals[7], err)
 		}
 		preSuffixNumber = num
 	}
@@ -152,13 +153,13 @@ func parseVersion(version string) (packageVersion, error) {
 	case "":
 		postSuffix = packageVersionPostModifierNone
 	default:
-		return packageVersion{}, fmt.Errorf("invalid version %s, suffix %s is not valid", version, actuals[9])
+		return Version{}, fmt.Errorf("invalid version %s, suffix %s is not valid", version, actuals[9])
 	}
 	var postSuffixNumber int
 	if actuals[10] != "" {
 		num, err := strconv.Atoi(actuals[10])
 		if err != nil {
-			return packageVersion{}, fmt.Errorf("invalid version %s, post-suffix %s number %s is not number: %w", version, actuals[9], actuals[10], err)
+			return Version{}, fmt.Errorf("invalid version %s, post-suffix %s number %s is not number: %w", version, actuals[9], actuals[10], err)
 		}
 		postSuffixNumber = num
 	}
@@ -167,11 +168,11 @@ func parseVersion(version string) (packageVersion, error) {
 	if actuals[13] != "" {
 		num, err := strconv.Atoi(actuals[13])
 		if err != nil {
-			return packageVersion{}, fmt.Errorf("invalid version %s, revision %s is not number: %w", version, actuals[13], err)
+			return Version{}, fmt.Errorf("invalid version %s, revision %s is not number: %w", version, actuals[13], err)
 		}
 		revision = num
 	}
-	return packageVersion{
+	return Version{
 		numbers:          numbers,
 		letter:           letter,
 		preSuffix:        preSuffix,
@@ -182,29 +183,14 @@ func parseVersion(version string) (packageVersion, error) {
 	}, nil
 }
 
-type versionCompare int
-
 const (
-	greater versionCompare = 1
-	equal   versionCompare = 0
-	less    versionCompare = -1
+	greater = 1
+	equal   = 0
+	less    = -1
 )
 
-func (vc versionCompare) String() string {
-	switch vc {
-	case greater:
-		return ">"
-	case equal:
-		return "="
-	case less:
-		return "<"
-	default:
-		return "???"
-	}
-}
-
-// compare versions based on https://dev.gentoo.org/~ulm/pms/head/pms.html#x1-250003.2
-func compareVersions(actual, required packageVersion) versionCompare {
+// CompareVersions compares versions based on https://dev.gentoo.org/~ulm/pms/head/pms.html#x1-250003.2
+func CompareVersions(actual, required Version) int {
 	for i := 0; i < len(actual.numbers) && i < len(required.numbers); i++ {
 		if actual.numbers[i] > required.numbers[i] {
 			return greater
@@ -283,7 +269,7 @@ func compareVersions(actual, required packageVersion) versionCompare {
 }
 
 // includesVersion returns true if the actual version is a strict subset of the required version
-func includesVersion(actual, required packageVersion) bool {
+func includesVersion(actual, required Version) bool {
 	// if more required numbers than actual numbers, than require is more specific,
 	// so no match
 	if len(actual.numbers) < len(required.numbers) {
@@ -340,11 +326,11 @@ const (
 	versionTilde
 )
 
-func (v versionDependency) satisfies(actualVersion, requiredVersion packageVersion) bool {
+func (v versionDependency) satisfies(actualVersion, requiredVersion Version) bool {
 	if v == versionTilde {
 		return includesVersion(actualVersion, requiredVersion)
 	}
-	c := compareVersions(actualVersion, requiredVersion)
+	c := CompareVersions(actualVersion, requiredVersion)
 	switch v {
 	case versionAny:
 		return true
