@@ -30,6 +30,7 @@ type opts struct {
 	version            string
 	cache              *cache
 	noSignatureIndexes []string
+	user, pass         string
 }
 
 type Option func(*opts) error
@@ -101,6 +102,14 @@ func WithCache(cacheDir string, offline bool) Option {
 func WithNoSignatureIndexes(noSignatureIndex ...string) Option {
 	return func(o *opts) error {
 		o.noSignatureIndexes = append(o.noSignatureIndexes, noSignatureIndex...)
+		return nil
+	}
+}
+
+func WithAuth(user, pass string) Option {
+	return func(o *opts) error {
+		o.user = user
+		o.pass = pass
 		return nil
 	}
 }
