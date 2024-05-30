@@ -65,6 +65,7 @@ type APK struct {
 	cache              *cache
 	ignoreSignatures   bool
 	noSignatureIndexes []string
+	user, pass         string
 
 	// filename to owning package, last write wins
 	installedFiles map[string]*Package
@@ -93,6 +94,8 @@ func New(options ...Option) (*APK, error) {
 		cache:              opt.cache,
 		noSignatureIndexes: opt.noSignatureIndexes,
 		installedFiles:     map[string]*Package{},
+		user:               opt.user,
+		pass:               opt.pass,
 	}, nil
 }
 
@@ -395,7 +398,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 				if err != nil {
 					return fmt.Errorf("failed to read apk key: %w", err)
 				}
-			case "https": //nolint:goconst
+			case "https", "http": //nolint:goconst
 				client := a.client
 				if a.cache != nil {
 					client = a.cache.client(client, true)
@@ -404,11 +407,15 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 				if err != nil {
 					return err
 				}
+
 				// if the URL contains HTTP Basic Auth credentials, add them to the request
 				if asURL.User != nil {
 					user := asURL.User.Username()
 					pass, _ := asURL.User.Password()
 					req.SetBasicAuth(user, pass)
+					req.URL.User = nil
+				} else if a.user != "" && a.pass != "" {
+					req.SetBasicAuth(a.user, a.pass)
 				}
 
 				resp, err := client.Do(req)
@@ -714,6 +721,7 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 	if err != nil {
 		return err
 	}
+	// NB: Not setting basic auth, since we know Alpine doesn't support it.
 	res, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to fetch alpine releases: %w", err)
@@ -748,6 +756,7 @@ func (a *APK) fetchAlpineKeys(ctx context.Context, alpineVersions []string) erro
 		if err != nil {
 			return err
 		}
+		// NB: Not setting basic auth, since we know Alpine doesn't support it.
 		res, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to fetch alpine key %s: %w", u, err)
@@ -995,7 +1004,7 @@ func expandPackage(ctx context.Context, a *APK, pkg InstallablePackage) (*expand
 func packageAsURI(pkg InstallablePackage) (uri.URI, error) {
 	u := pkg.URL()
 
-	if strings.HasPrefix(u, "https://") {
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") {
 		return uri.Parse(u)
 	}
 
@@ -1035,7 +1044,7 @@ func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.Read
 			return nil, fmt.Errorf("failed to read repository package apk %s: %w", u, err)
 		}
 		return f, nil
-	case "https":
+	case "https", "http":
 		client := a.client
 		if a.cache != nil {
 			client = a.cache.client(client, false)
@@ -1043,6 +1052,9 @@ func (a *APK) FetchPackage(ctx context.Context, pkg InstallablePackage) (io.Read
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
 			return nil, err
+		}
+		if a.user != "" && a.pass != "" {
+			req.SetBasicAuth(a.user, a.pass)
 		}
 
 		// This will return a body that retries requests using Range requests if Read() hits an error.

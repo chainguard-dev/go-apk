@@ -20,6 +20,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -483,5 +484,53 @@ func TestFetchPackage(t *testing.T) {
 		apk2, err := os.ReadFile(filepath.Join(testAlternatePkgDir, testPkgFilename))
 		require.NoError(t, err, "unable to read testdata apk file")
 		require.Equal(t, apk1, apk2, "apk files do not match")
+	})
+
+	t.Run("auth", func(t *testing.T) {
+		called := false
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			gotuser, gotpass, ok := r.BasicAuth()
+			if !ok || gotuser != "user" || gotpass != "pass" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			http.FileServer(http.Dir(testPrimaryPkgDir)).ServeHTTP(w, r)
+		}))
+		defer s.Close()
+
+		repo := Repository{URI: s.URL}
+		repoWithIndex := repo.WithIndex(&APKIndex{Packages: []*Package{&testPkg}})
+		pkg := NewRepositoryPackage(&testPkg, repoWithIndex)
+		ctx := context.Background()
+
+		t.Run("good auth", func(t *testing.T) {
+			src := apkfs.NewMemFS()
+			err := src.MkdirAll("lib/apk/db", 0o755)
+			require.NoError(t, err, "unable to mkdir /lib/apk/db")
+
+			a, err := New(WithFS(src), WithAuth("user", "pass"))
+			require.NoError(t, err, "unable to create APK")
+			err = a.InitDB(ctx)
+			require.NoError(t, err)
+
+			_, err = a.FetchPackage(ctx, pkg)
+			require.NoErrorf(t, err, "unable to install package")
+			require.True(t, called, "did not make request")
+		})
+
+		t.Run("bad auth", func(t *testing.T) {
+			src := apkfs.NewMemFS()
+			err := src.MkdirAll("lib/apk/db", 0o755)
+			require.NoError(t, err, "unable to mkdir /lib/apk/db")
+
+			a, err := New(WithFS(src), WithAuth("baduser", "pass"))
+			require.NoError(t, err, "unable to create APK")
+			err = a.InitDB(ctx)
+			require.NoError(t, err)
+
+			_, err = a.FetchPackage(ctx, pkg)
+			require.Error(t, err, "should fail with bad auth")
+		})
 	})
 }

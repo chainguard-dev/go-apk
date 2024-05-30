@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -299,6 +300,41 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		}
 		require.NoErrorf(t, eg.Wait(), "unable to get indexes")
 	})
+
+	t.Run("auth", func(t *testing.T) {
+		called := false
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			gotuser, gotpass, ok := r.BasicAuth()
+			if !ok || gotuser != "user" || gotpass != "pass" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x86_64")
+			http.FileServer(http.Dir(testPrimaryPkgDir)).ServeHTTP(w, r)
+		}))
+		defer s.Close()
+
+		ctx := context.Background()
+
+		t.Run("good auth", func(t *testing.T) {
+			_, err := GetRepositoryIndexes(ctx, []string{s.URL}, nil, "x86_64",
+				WithIgnoreSignatures(true),
+				WithHTTPClient(http.DefaultClient),
+				WithIndexAuth("user", "pass"))
+			require.NoErrorf(t, err, "unable to get indexes")
+			require.True(t, called, "did not make request")
+		})
+
+		t.Run("bad auth", func(t *testing.T) {
+			_, err := GetRepositoryIndexes(ctx, []string{s.URL}, nil, "x86_64",
+				WithIgnoreSignatures(true),
+				WithHTTPClient(http.DefaultClient),
+				WithIndexAuth("baduser", "badpass"))
+			require.NoErrorf(t, err, "unable to get indexes")
+		})
+	})
+
 }
 
 func testGetPackagesAndIndex() ([]*RepositoryPackage, []*RepositoryWithIndex) {

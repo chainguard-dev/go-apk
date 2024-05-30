@@ -64,7 +64,7 @@ type indexCache struct {
 }
 
 func (i *indexCache) get(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
-	if strings.HasPrefix(u, "https://") {
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") {
 		// We don't want remote indexes to change while we're running.
 		once, _ := i.onces.LoadOrStore(u, &sync.Once{})
 		once.(*sync.Once).Do(func() {
@@ -182,7 +182,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 		asURL *url.URL
 		err   error
 	)
-	if strings.HasPrefix(u, "https://") {
+	if strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") {
 		asURL, err = url.Parse(u)
 	} else {
 		// Attempt to parse non-https elements into URI's so they are translated into
@@ -202,7 +202,7 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 			}
 			return nil, nil
 		}
-	case "https":
+	case "https", "http":
 		client := opts.httpClient
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, asURL.String(), nil)
 		if err != nil {
@@ -213,6 +213,8 @@ func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, a
 			user := asURL.User.Username()
 			pass, _ := asURL.User.Password()
 			req.SetBasicAuth(user, pass)
+		} else if opts.user != "" || opts.pass != "" {
+			req.SetBasicAuth(opts.user, opts.pass)
 		}
 
 		// This will return a body that retries requests using Range requests if Read() hits an error.
@@ -318,6 +320,7 @@ type indexOpts struct {
 	ignoreSignatures   bool
 	noSignatureIndexes []string
 	httpClient         *http.Client
+	user, pass         string
 }
 type IndexOption func(*indexOpts)
 
@@ -336,5 +339,12 @@ func WithIgnoreSignatureForIndexes(noSignatureIndexes ...string) IndexOption {
 func WithHTTPClient(c *http.Client) IndexOption {
 	return func(o *indexOpts) {
 		o.httpClient = c
+	}
+}
+
+func WithIndexAuth(user, pass string) IndexOption {
+	return func(o *indexOpts) {
+		o.user = user
+		o.pass = pass
 	}
 }
