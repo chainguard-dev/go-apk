@@ -173,7 +173,7 @@ func shouldCheckSignatureForIndex(index string, arch string, opts *indexOpts) bo
 	return true
 }
 
-func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) {
+func getRepositoryIndex(ctx context.Context, u string, keys map[string][]byte, arch string, opts *indexOpts) (*APKIndex, error) { //nolint:gocyclo
 	// Normalize the repo as a URI, so that local paths
 	// are translated into file:// URLs, allowing them to be parsed
 	// into a url.URL{}.

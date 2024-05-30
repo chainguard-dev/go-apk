@@ -334,7 +334,6 @@ func TestGetRepositoryIndexes(t *testing.T) {
 			require.NoErrorf(t, err, "unable to get indexes")
 		})
 	})
-
 }
 
 func testGetPackagesAndIndex() ([]*RepositoryPackage, []*RepositoryWithIndex) {
