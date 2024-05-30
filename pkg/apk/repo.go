@@ -176,7 +176,11 @@ func (a *APK) GetRepositoryIndexes(ctx context.Context, ignoreSignatures bool) (
 	if a.cache != nil {
 		httpClient = a.cache.client(httpClient, true)
 	}
-	return GetRepositoryIndexes(ctx, repos, keys, arch, WithIgnoreSignatures(ignoreSignatures), WithHTTPClient(httpClient), WithIgnoreSignatureForIndexes(a.noSignatureIndexes...))
+	return GetRepositoryIndexes(ctx, repos, keys, arch,
+		WithIgnoreSignatures(ignoreSignatures),
+		WithIgnoreSignatureForIndexes(a.noSignatureIndexes...),
+		WithHTTPClient(httpClient),
+		WithIndexAuth(a.user, a.pass))
 }
 
 // PkgResolver resolves packages from a list of indexes.
