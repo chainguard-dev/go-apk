@@ -306,7 +306,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 			gotuser, gotpass, ok := r.BasicAuth()
-			if !ok || gotuser != "user" || gotpass != "pass" {
+			if !ok || gotuser != testUser || gotpass != testPass {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
@@ -321,7 +321,7 @@ func TestGetRepositoryIndexes(t *testing.T) {
 			_, err := GetRepositoryIndexes(ctx, []string{s.URL}, nil, "x86_64",
 				WithIgnoreSignatures(true),
 				WithHTTPClient(http.DefaultClient),
-				WithIndexAuth("user", "pass"))
+				WithIndexAuth(testUser, testPass))
 			require.NoErrorf(t, err, "unable to get indexes")
 			require.True(t, called, "did not make request")
 		})

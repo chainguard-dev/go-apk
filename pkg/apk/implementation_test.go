@@ -58,7 +58,8 @@ var (
 		// But it shouldn't just change unless you change the test data!
 		Checksum: []byte{44, 186, 182, 168, 51, 107, 75, 250, 145, 158, 28, 80, 222, 27, 24, 254, 193, 219, 66, 119},
 	}
-	testPkgFilename = fmt.Sprintf("%s-%s.apk", testPkg.Name, testPkg.Version)
+	testPkgFilename    = fmt.Sprintf("%s-%s.apk", testPkg.Name, testPkg.Version)
+	testUser, testPass = "user", "pass"
 )
 
 func TestInitDB(t *testing.T) {
@@ -225,6 +226,52 @@ func TestInitKeyring(t *testing.T) {
 		Transport: &testLocalTransport{root: testPrimaryPkgDir, basenameOnly: true, requireBasicAuth: true},
 	})
 	require.NoError(t, a.InitKeyring(context.Background(), keyfiles, nil))
+
+	t.Run("auth", func(t *testing.T) {
+		called := false
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			gotuser, gotpass, ok := r.BasicAuth()
+			if !ok || gotuser != testUser || gotpass != testPass {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			http.FileServer(http.Dir(testPrimaryPkgDir)).ServeHTTP(w, r)
+		}))
+		defer s.Close()
+
+		ctx := context.Background()
+
+		t.Run("good auth", func(t *testing.T) {
+			src := apkfs.NewMemFS()
+			err := src.MkdirAll("lib/apk/db", 0o755)
+			require.NoError(t, err, "unable to mkdir /lib/apk/db")
+
+			a, err := New(WithFS(src), WithAuth(testUser, testPass))
+			require.NoError(t, err, "unable to create APK")
+			err = a.InitDB(ctx)
+			require.NoError(t, err)
+
+			err = a.InitKeyring(ctx, []string{s.URL + "/alpine-devel@lists.alpinelinux.org-4a6a0840.rsa.pub"}, nil)
+			require.NoErrorf(t, err, "unable to init keyring")
+			require.True(t, called, "did not make request")
+		})
+
+		t.Run("bad auth", func(t *testing.T) {
+			src := apkfs.NewMemFS()
+			err := src.MkdirAll("lib/apk/db", 0o755)
+			require.NoError(t, err, "unable to mkdir /lib/apk/db")
+
+			a, err := New(WithFS(src), WithAuth("baduser", "badpass"))
+			require.NoError(t, err, "unable to create APK")
+			err = a.InitDB(ctx)
+			require.NoError(t, err)
+
+			err = a.InitKeyring(ctx, []string{s.URL + "/alpine-devel@lists.alpinelinux.org-4a6a0840.rsa.pub"}, nil)
+			require.Error(t, err, "should fail with bad auth")
+			require.True(t, called, "did not make request")
+		})
+	})
 }
 
 func TestLoadSystemKeyring(t *testing.T) {
@@ -491,7 +538,7 @@ func TestFetchPackage(t *testing.T) {
 		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			called = true
 			gotuser, gotpass, ok := r.BasicAuth()
-			if !ok || gotuser != "user" || gotpass != "pass" {
+			if !ok || gotuser != testUser || gotpass != testPass {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
@@ -509,7 +556,7 @@ func TestFetchPackage(t *testing.T) {
 			err := src.MkdirAll("lib/apk/db", 0o755)
 			require.NoError(t, err, "unable to mkdir /lib/apk/db")
 
-			a, err := New(WithFS(src), WithAuth("user", "pass"))
+			a, err := New(WithFS(src), WithAuth(testUser, testPass))
 			require.NoError(t, err, "unable to create APK")
 			err = a.InitDB(ctx)
 			require.NoError(t, err)
@@ -524,7 +571,7 @@ func TestFetchPackage(t *testing.T) {
 			err := src.MkdirAll("lib/apk/db", 0o755)
 			require.NoError(t, err, "unable to mkdir /lib/apk/db")
 
-			a, err := New(WithFS(src), WithAuth("baduser", "pass"))
+			a, err := New(WithFS(src), WithAuth("baduser", "badpass"))
 			require.NoError(t, err, "unable to create APK")
 			err = a.InitDB(ctx)
 			require.NoError(t, err)
