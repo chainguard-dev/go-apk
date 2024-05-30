@@ -194,7 +194,8 @@ func TestGetRepositoryIndexes(t *testing.T) {
 				requireBasicAuth: true,
 			},
 		})
-		indexes, err := a.GetRepositoryIndexes(context.TODO(), false)
+		ctx := context.Background()
+		indexes, err := a.GetRepositoryIndexes(ctx, false)
 		require.NoErrorf(t, err, "unable to get indexes")
 		require.Greater(t, len(indexes), 0, "no indexes found")
 	})
@@ -300,40 +301,62 @@ func TestGetRepositoryIndexes(t *testing.T) {
 		}
 		require.NoErrorf(t, eg.Wait(), "unable to get indexes")
 	})
+}
 
-	t.Run("auth", func(t *testing.T) {
-		called := false
-		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			called = true
-			gotuser, gotpass, ok := r.BasicAuth()
-			if !ok || gotuser != testUser || gotpass != testPass {
-				w.WriteHeader(http.StatusForbidden)
-				return
-			}
-			r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x86_64")
-			http.FileServer(http.Dir(testPrimaryPkgDir)).ServeHTTP(w, r)
-		}))
-		defer s.Close()
+func TestIndexAuth_good(t *testing.T) {
+	called := false
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if gotuser, gotpass, ok := r.BasicAuth(); !ok || gotuser != testUser || gotpass != testPass {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x86_64")
+		http.FileServer(http.Dir(testPrimaryPkgDir)).ServeHTTP(w, r)
+	}))
+	defer s.Close()
 
-		ctx := context.Background()
+	ctx := context.Background()
 
-		t.Run("good auth", func(t *testing.T) {
-			_, err := GetRepositoryIndexes(ctx, []string{s.URL}, nil, "x86_64",
-				WithIgnoreSignatures(true),
-				WithHTTPClient(http.DefaultClient),
-				WithIndexAuth(testUser, testPass))
-			require.NoErrorf(t, err, "unable to get indexes")
-			require.True(t, called, "did not make request")
-		})
+	a, err := New(WithFS(apkfs.NewMemFS()),
+		WithAuth(testUser, testPass),
+		WithArch("x86_64"))
+	require.NoErrorf(t, err, "unable to create APK")
+	err = a.InitDB(ctx)
+	require.NoError(t, err, "unable to init db")
+	err = a.SetRepositories(ctx, []string{s.URL})
+	require.NoError(t, err, "unable to set repositories")
+	_, err = a.GetRepositoryIndexes(ctx, true)
+	require.NoErrorf(t, err, "unable to get indexes")
+	require.True(t, called, "did not make request")
+}
 
-		t.Run("bad auth", func(t *testing.T) {
-			_, err := GetRepositoryIndexes(ctx, []string{s.URL}, nil, "x86_64",
-				WithIgnoreSignatures(true),
-				WithHTTPClient(http.DefaultClient),
-				WithIndexAuth("baduser", "badpass"))
-			require.NoErrorf(t, err, "unable to get indexes")
-		})
-	})
+func TestIndexAuth_bad(t *testing.T) {
+	called := false
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if gotuser, gotpass, ok := r.BasicAuth(); !ok || gotuser != testUser || gotpass != testPass {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x86_64")
+		http.FileServer(http.Dir(testPrimaryPkgDir)).ServeHTTP(w, r)
+	}))
+	defer s.Close()
+
+	ctx := context.Background()
+
+	a, err := New(WithFS(apkfs.NewMemFS()),
+		WithAuth("baduser", "badpass"),
+		WithArch("x86_64"))
+	require.NoErrorf(t, err, "unable to create APK")
+	err = a.InitDB(ctx)
+	require.NoError(t, err, "unable to init db")
+	err = a.SetRepositories(ctx, []string{s.URL})
+	require.NoError(t, err, "unable to set repositories")
+	_, err = a.GetRepositoryIndexes(ctx, true)
+	require.Error(t, err, "should fail with bad auth")
+	require.True(t, called, "did not make request")
 }
 
 func testGetPackagesAndIndex() ([]*RepositoryPackage, []*RepositoryWithIndex) {
