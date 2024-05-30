@@ -380,7 +380,7 @@ func (a *APK) InitKeyring(ctx context.Context, keyFiles, extraKeyFiles []string)
 
 			var asURL *url.URL
 			var err error
-			if strings.HasPrefix(element, "https://") {
+			if strings.HasPrefix(element, "https://") || strings.HasPrefix(element, "http://") {
 				asURL, err = url.Parse(element)
 			} else {
 				// Attempt to parse non-https elements into URI's so they are translated into
