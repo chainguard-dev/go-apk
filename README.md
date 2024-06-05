@@ -1,5 +1,10 @@
 # go-apk
 
+> [!WARNING]
+> This library is no longer maintained as a separate standalone package. Instead, it's been re-absorbed into [apko](https://github.com/chainguard-dev/apko).
+
+
+
 A native go implementation of the functionality of the [Alpine Package Keeper](https://wiki.alpinelinux.org/wiki/Alpine_Package_Keeper)
 client utility `apk`.
 
