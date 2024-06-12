@@ -61,11 +61,17 @@ func (e *etagCache) get(t *cacheTransport, request *http.Request, cacheFile stri
 			// We don't expect any body from a HEAD so just always close it to appease the linter.
 			resp.Body.Close()
 		}
-		if rerr != nil || resp.StatusCode != 200 {
-			e.resps.Store(url, etagResp{
-				resp: resp,
-				err:  rerr,
-			})
+		switch {
+		case rerr != nil:
+			e.resps.Store(url, etagResp{err:  rerr})
+			return
+		case resp.StatusCode == http.StatusMethodNotAllowed:
+			// Treat the same as absence of an etag
+			// This allows us to download packages from Gitea/Forgejo package repositories,
+			// which don't support HEADs
+			return
+		case resp.StatusCode != http.StatusOK:
+			e.resps.Store(url, etagResp{resp: resp})
 			return
 		}
 
