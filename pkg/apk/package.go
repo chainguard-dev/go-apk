@@ -47,6 +47,7 @@ func PackageToInstalled(pkg *Package) (out []string) {
 	out = append(out, fmt.Sprintf("S:%d", pkg.Size))
 	out = append(out, fmt.Sprintf("I:%d", pkg.InstalledSize))
 	out = append(out, fmt.Sprintf("k:%d", pkg.ProviderPriority))
+	out = append(out, fmt.Sprintf("q:%d", pkg.ReplacesPriority))
 	if len(pkg.Checksum) > 0 {
 		out = append(out, fmt.Sprintf("C:%s", pkg.ChecksumString()))
 	}
@@ -79,6 +80,7 @@ type Package struct {
 	Size             uint64 `ini:"size"`
 	InstalledSize    uint64
 	ProviderPriority uint64 `ini:"provider_priority"`
+	ReplacesPriority uint64 `ini:"replaces_priority"`
 	BuildTime        time.Time
 	BuildDate        int64    `ini:"builddate"`
 	RepoCommit       string   `ini:"commit"`
